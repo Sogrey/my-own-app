@@ -6,7 +6,8 @@ import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getAppPaths, type AppPaths } from "./config.js";
 import { DatabaseManager } from "./database.js";
-import { AppStore, NotFoundError, ValidationError } from "./store.js";
+import { NotFoundError, ValidationError } from "./errors.js";
+import { AppStore } from "./store.js";
 import { BackupManager } from "./backup.js";
 import { buildDashboard } from "./dashboard.js";
 import { collectionDefinitions, isCollectionName, sourceCollectionByType } from "./collections.js";
@@ -32,7 +33,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook("onRequest", async (request, reply) => {
     if (!["POST", "PATCH", "PUT", "DELETE"].includes(request.method)) return;
     const origin = request.headers.origin;
-    if (origin && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+    if (!origin || !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
       return reply.code(403).send({ error: { code: "INVALID_ORIGIN", message: "请求来源无效" } });
     }
   });
@@ -137,6 +138,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return { data: store.update("planItems", id, { plan_date: body.date, status: "todo", completed_at: null }) };
   });
 
+  app.post("/api/workouts/from-template", async (request) => {
+    const body = z.object({
+      template_id: z.string().min(1),
+      workout_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    }).parse(request.body ?? {});
+    const workoutDate = body.workout_date ?? new Date().toLocaleDateString("en-CA");
+    return { data: store.startWorkoutFromTemplate(body.template_id, workoutDate) };
+  });
+
   app.get("/api/daily-reviews/:date", async (request) => {
     const { date } = request.params as { date: string };
     return { data: store.getDailyReview(date) };
@@ -193,9 +203,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   app.post("/api/system/open-path", async (request) => {
     const body = z.object({ path: z.string().min(1) }).parse(request.body);
-    if (!fs.existsSync(body.path)) throw new ValidationError("这个本地路径不存在");
-    openPath(path.resolve(body.path));
-    return { data: { opened: true } };
+    const resolved = assertOpenablePath(body.path, paths, store);
+    openPath(resolved);
+    return { data: { opened: true, path: resolved } };
   });
 
   app.get("/api/backups", async () => ({ data: backups.list() }));
@@ -302,4 +312,26 @@ function openPath(target: string): void {
   const { command, args } = openPathCommand(target);
   const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
   child.unref();
+}
+
+function assertOpenablePath(target: string, paths: AppPaths, store: AppStore): string {
+  const resolved = path.resolve(target);
+  if (!fs.existsSync(resolved)) throw new ValidationError("这个本地路径不存在");
+  const dataRoot = path.resolve(paths.root);
+  if (isPathInside(resolved, dataRoot)) return resolved;
+  const projectPaths = store
+    .list("devProjects")
+    .map((project) => String(project.local_path || "").trim())
+    .filter(Boolean)
+    .map((value) => path.resolve(value));
+  if (projectPaths.some((allowed) => isPathInside(resolved, allowed))) return resolved;
+  throw new ValidationError("只能打开数据目录或已保存的项目本地目录");
+}
+
+function isPathInside(candidate: string, root: string): boolean {
+  const normalizedRoot = path.resolve(root);
+  const normalizedCandidate = path.resolve(candidate);
+  if (normalizedCandidate === normalizedRoot) return true;
+  const prefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : `${normalizedRoot}${path.sep}`;
+  return normalizedCandidate.startsWith(prefix);
 }

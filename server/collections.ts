@@ -1,3 +1,7 @@
+import { isCollectionName, type CollectionName } from "../shared/schema.js";
+
+export { isCollectionName, type CollectionName };
+
 export const collectionDefinitions = {
   planItems: {
     table: "plan_items",
@@ -199,13 +203,35 @@ export const collectionDefinitions = {
     fields: ["entertainment_id", "started_at", "ended_at", "duration_minutes", "progress_note"],
     search: ["progress_note"],
   },
-} as const;
+} as const satisfies Record<CollectionName, {
+  table: string;
+  title: string;
+  module: string;
+  required: readonly string[];
+  fields: readonly string[];
+  search: readonly string[];
+}>;
 
-export type CollectionName = keyof typeof collectionDefinitions;
-
-export function isCollectionName(value: string): value is CollectionName {
-  return Object.hasOwn(collectionDefinitions, value);
-}
+/** 父集合 → 直接子集合（用于永久删除时清理回收站与子树）。软删除不自动级联，以保留咨询等模块「隐藏父记录、子记录仍可访问」的行为。 */
+export const dependentCollections: Partial<Record<CollectionName, Array<{ collection: CollectionName; foreignKey: string }>>> = {
+  clients: [{ collection: "consultingProjects", foreignKey: "client_id" }],
+  consultingProjects: [
+    { collection: "consultingInteractions", foreignKey: "project_id" },
+    { collection: "consultingDeliverables", foreignKey: "project_id" },
+    { collection: "consultingFollowups", foreignKey: "project_id" },
+    { collection: "consultingTimeEntries", foreignKey: "project_id" },
+  ],
+  devProjects: [
+    { collection: "devMilestones", foreignKey: "project_id" },
+    { collection: "devWorkItems", foreignKey: "project_id" },
+    { collection: "devLogs", foreignKey: "project_id" },
+  ],
+  workoutTemplates: [{ collection: "workoutTemplateExercises", foreignKey: "template_id" }],
+  workouts: [{ collection: "workoutExercises", foreignKey: "workout_id" }],
+  workoutExercises: [{ collection: "workoutSets", foreignKey: "workout_exercise_id" }],
+  meals: [{ collection: "mealItems", foreignKey: "meal_id" }],
+  entertainmentItems: [{ collection: "playSessions", foreignKey: "entertainment_id" }],
+};
 
 export const sourceCollectionByType: Record<string, CollectionName> = {
   media_content: "mediaContents",
