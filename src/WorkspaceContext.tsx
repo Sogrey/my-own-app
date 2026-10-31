@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowCounterClockwise } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, CheckCircle } from "@phosphor-icons/react";
 import { api, setWorkspaceMutationListener } from "./api";
 import type { CollectionName, WorkspaceState } from "./types";
 import { applyWorkspaceMutation, type WorkspaceMutation } from "./workspaceState";
@@ -14,6 +14,11 @@ type UndoToast = {
   label: string;
 };
 
+type SuccessToast = {
+  title: string;
+  detail?: string;
+};
+
 type WorkspaceContextValue = {
   data: WorkspaceState;
   loading: boolean;
@@ -23,6 +28,7 @@ type WorkspaceContextValue = {
   saveNow: () => Promise<void>;
   registerSaveHandler: (handler: SaveHandler) => () => void;
   refresh: () => Promise<void>;
+  notifySuccess: (title: string, detail?: string) => void;
 };
 
 const emptyState: WorkspaceState = {
@@ -44,9 +50,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const [successToast, setSuccessToast] = useState<SuccessToast | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const saveHandlers = useRef(new Set<SaveHandler>());
   const undoTimer = useRef(0);
+  const successTimer = useRef(0);
   const query = useQuery({ queryKey: ["workspace"], queryFn: api.state, staleTime: 15_000 });
 
   useEffect(() => {
@@ -57,11 +65,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const offerUndo = useCallback((collection: CollectionName, entity: Record<string, any>) => {
     window.clearTimeout(undoTimer.current);
+    window.clearTimeout(successTimer.current);
+    setSuccessToast(null);
     setUndoToast({ collection, entityId: String(entity.id), label: entityLabel(entity) });
     undoTimer.current = window.setTimeout(() => setUndoToast(null), 7000);
   }, []);
 
-  useEffect(() => () => window.clearTimeout(undoTimer.current), []);
+  const notifySuccess = useCallback((title: string, detail?: string) => {
+    window.clearTimeout(successTimer.current);
+    window.clearTimeout(undoTimer.current);
+    setUndoToast(null);
+    setSuccessToast({ title, detail });
+    successTimer.current = window.setTimeout(() => setSuccessToast(null), 2800);
+  }, []);
+
+  useEffect(() => () => {
+    window.clearTimeout(undoTimer.current);
+    window.clearTimeout(successTimer.current);
+  }, []);
 
   useEffect(() => {
     const onMutation = (mutation: WorkspaceMutation) => {
@@ -140,7 +161,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     refresh: async () => {
       await queryClient.invalidateQueries();
     },
-  }), [query.data, query.isLoading, query.error, queryClient, registerSaveHandler, run, saveNow, saveStatus]);
+    notifySuccess,
+  }), [notifySuccess, query.data, query.isLoading, query.error, queryClient, registerSaveHandler, run, saveNow, saveStatus]);
 
   return (
     <WorkspaceContext.Provider value={value}>
@@ -155,6 +177,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             <ArrowCounterClockwise size={16} />
             撤销
           </button>
+        </div>
+      ) : successToast ? (
+        <div className="undo-toast success-toast glass-regular" role="status" aria-live="polite" data-testid="success-toast">
+          <CheckCircle size={18} weight="fill" aria-hidden />
+          <div className="undo-toast-copy">
+            <strong>{successToast.title}</strong>
+            {successToast.detail ? <span>{successToast.detail}</span> : null}
+          </div>
         </div>
       ) : null}
     </WorkspaceContext.Provider>

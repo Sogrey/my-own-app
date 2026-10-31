@@ -35,12 +35,19 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
-export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
+export function EmptyState({ title, description, hint, action }: {
+  title: string;
+  description: string;
+  /** 推荐下一步，比 description 更短、更可执行 */
+  hint?: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty-state">
       <div className="empty-mark" />
       <h3>{title}</h3>
       <p>{description}</p>
+      {hint ? <p className="empty-hint">下一步：{hint}</p> : null}
       {action}
     </div>
   );
@@ -216,5 +223,61 @@ export function Section({ title, description, action, children, className }: { t
       <header className="section-header"><div><h2>{title}</h2>{description ? <p>{description}</p> : null}</div>{action}</header>
       {children}
     </section>
+  );
+}
+
+/** 列表页右侧详情侧栏：边看边改；轻量新建仍用 Modal。 */
+export function DetailPanel({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  description?: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const panelRef = useRef<HTMLElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => {
+      const first = panelRef.current?.querySelector<HTMLElement>("[autofocus]")
+        ?? panelRef.current?.querySelector<HTMLElement>("button, input, textarea, select, [tabindex]:not([tabindex='-1'])");
+      first?.focus();
+    });
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handler);
+      previousFocus?.focus();
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <aside
+      ref={panelRef}
+      className="detail-panel glass-regular"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      data-testid="detail-panel"
+    >
+      <header className="detail-panel-header">
+        <div>
+          <h2 id={titleId}>{title}</h2>
+          {description ? <p id={descriptionId}>{description}</p> : null}
+        </div>
+        <IconButton label="关闭详情" onClick={onClose}><X size={18} /></IconButton>
+      </header>
+      <div className="detail-panel-body">{children}</div>
+    </aside>
   );
 }
