@@ -233,6 +233,48 @@ export class AppStore {
     return results;
   }
 
+  /**
+   * 选择性导入：保留原 id；已存在则跳过。
+   * 不覆盖现有记录，避免静默改写用户数据。
+   */
+  importRows(name: CollectionName, rows: Entity[]): { created: number; skipped: number; failed: number } {
+    const definition = collectionDefinitions[name];
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+    const exists = this.manager.db.prepare(`SELECT 1 AS ok FROM ${definition.table} WHERE id = ?`);
+    const run = this.manager.db.transaction(() => {
+      for (const raw of rows) {
+        try {
+          const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : randomUUID();
+          if (exists.get(id)) {
+            skipped += 1;
+            continue;
+          }
+          const clean = validateCollectionInput(name, this.sanitize(name, raw), "create");
+          this.requireFields(definition.required, clean);
+          const now = new Date().toISOString();
+          const row: Entity = {
+            id,
+            ...clean,
+            created_at: typeof raw.created_at === "string" && raw.created_at ? raw.created_at : now,
+            updated_at: typeof raw.updated_at === "string" && raw.updated_at ? raw.updated_at : now,
+            deleted_at: raw.deleted_at ?? null,
+          };
+          const columns = Object.keys(row);
+          this.manager.db
+            .prepare(`INSERT INTO ${definition.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`)
+            .run(...columns.map((column) => row[column] ?? null));
+          created += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+    });
+    run();
+    return { created, skipped, failed };
+  }
+
   sourceTitle(type: string | null, id: string | null): string | null {
     if (!type || !id) return null;
     const collection = sourceCollectionByType[type];

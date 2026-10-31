@@ -10,7 +10,7 @@ import { NotFoundError, ValidationError } from "./errors.js";
 import { AppStore } from "./store.js";
 import { BackupManager } from "./backup.js";
 import { buildDashboard } from "./dashboard.js";
-import { collectionDefinitions, isCollectionName, sourceCollectionByType } from "./collections.js";
+import { collectionDefinitions, isCollectionName, sourceCollectionByType, type CollectionName } from "./collections.js";
 import { openPathCommand } from "./platform.js";
 
 const bodySchema = z.record(z.string(), z.unknown());
@@ -228,6 +228,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post("/api/export", async (_request, reply) => {
     const result = await backups.exportAll();
     return reply.code(201).send({ data: { ...result, downloadUrl: `/api/exports/${encodeURIComponent(result.filename)}` } });
+  });
+
+  app.post("/api/import", { bodyLimit: 32 * 1024 * 1024 }, async (request, reply) => {
+    const body = z.object({
+      collections: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
+      safetyBackup: z.boolean().optional(),
+    }).parse(request.body ?? {});
+    const selected = Object.entries(body.collections).filter(([name, rows]) => isCollectionName(name) && rows.length > 0) as Array<[
+      CollectionName,
+      Array<Record<string, unknown>>,
+    ]>;
+    if (!selected.length) throw new ValidationError("请至少选择一个有数据的模块");
+    if (body.safetyBackup !== false) {
+      await backups.create("safety", "导入前安全备份", false);
+    }
+    const summary: Record<string, { created: number; skipped: number; failed: number }> = {};
+    for (const [name, rows] of selected) {
+      summary[name] = store.importRows(name, rows);
+    }
+    return reply.code(201).send({ data: { summary } });
   });
   app.get("/api/exports/:filename", async (request, reply) => {
     const { filename } = request.params as { filename: string };

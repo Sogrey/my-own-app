@@ -48,7 +48,16 @@ export const knownSettingKeys = [
   "weekStart",
   "dateFormat",
   "dashboardModules",
+  "consultingStaleDays",
 ] as const;
+
+export const DEFAULT_CONSULTING_STALE_DAYS = 14;
+
+export function normalizeConsultingStaleDays(value: unknown): number {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_CONSULTING_STALE_DAYS;
+  return Math.min(365, Math.max(1, Math.round(number)));
+}
 
 export type KnownSettingKey = (typeof knownSettingKeys)[number];
 

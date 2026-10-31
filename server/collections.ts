@@ -8,7 +8,7 @@ export const collectionDefinitions = {
     title: "title",
     module: "today",
     required: ["title", "plan_date"],
-    fields: ["title", "plan_date", "start_time", "estimated_minutes", "priority", "status", "source_module", "source_entity_type", "source_entity_id", "complete_source", "notes", "completed_at"],
+    fields: ["title", "plan_date", "start_time", "estimated_minutes", "priority", "matrix_quadrant", "status", "source_module", "source_entity_type", "source_entity_id", "complete_source", "notes", "completed_at"],
     search: ["title", "notes"],
   },
   quickMemos: {
