@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Database, FolderOpen, ShieldCheck, DownloadSimple, ArrowCounterClockwise, Trash, Sun, Moon, Check, Archive, Notebook, Stack, SquaresFour, Power } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Database, FolderOpen, ShieldCheck, DownloadSimple, ArrowCounterClockwise, Trash, Sun, Moon, Check, Archive, Notebook, Stack, SquaresFour, Power, UploadSimple } from "@phosphor-icons/react";
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import type { CollectionName } from "../types";
@@ -9,12 +9,14 @@ import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, PageHeader, Secti
 import { ExitScreen } from "../components/ExitScreen";
 import { ModuleArtwork } from "../components/ModuleArtwork";
 import { normalizeAppearance } from "../appearance";
+import { parseImportFile, summarizeImport, type ImportPreview } from "../features/importPayload";
 
 const collectionLabels: Record<string, string> = { planItems: "今日计划", quickMemos: "快速备忘", mediaContents: "自媒体", devProjects: "开发项目", devMilestones: "里程碑", devWorkItems: "开发工作项", devLogs: "开发日志", clients: "客户", consultingProjects: "咨询项目", consultingInteractions: "沟通记录", consultingDeliverables: "交付物", consultingFollowups: "咨询跟进", consultingTimeEntries: "咨询时长", workoutTemplates: "训练模板", workoutTemplateExercises: "模板动作", workouts: "训练记录", workoutExercises: "训练动作", workoutSets: "训练组", bodyMetrics: "身体数据", nutritionTargets: "营养目标", foods: "常用食物", meals: "餐食", mealItems: "餐食明细", entertainmentItems: "游戏娱乐", playSessions: "游玩记录" };
 const dashboardOptions = [{ value: "media", label: "自媒体" }, { value: "development", label: "开发工作" }, { value: "consulting", label: "咨询工作" }, { value: "fitness", label: "健身计划" }, { value: "diet", label: "饮食计划" }, { value: "entertainment", label: "游戏娱乐" }];
 
 export function SettingsPage() {
-  const { data, run, saveNow } = useWorkspace();
+  const { data, run, saveNow, refresh } = useWorkspace();
+  const queryClient = useQueryClient();
   const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus });
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backups });
   const [busy, setBusy] = useState("");
@@ -23,10 +25,59 @@ export function SettingsPage() {
   const [exitState, setExitState] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [permanent, setPermanent] = useState<{ collection: CollectionName; id: string; title: string } | null>(null);
   const [dashboardModules, setDashboardModules] = useState<string[] | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importSelected, setImportSelected] = useState<CollectionName[]>([]);
+  const [importError, setImportError] = useState("");
+  const [importResult, setImportResult] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
   const saveSetting = (key: string, value: any) => run(() => api.saveSettings({ [key]: value }));
   useEffect(() => { setDashboardModules(null); }, [data.settings.dashboardModules]);
   const createBackup = async () => { setBusy("backup"); try { await run(() => api.createBackup("手动备份", false)); } finally { setBusy(""); } };
   const exportAll = async () => { setBusy("export"); try { const result = await run(api.exportAll); window.location.href = result.downloadUrl; } finally { setBusy(""); } };
+  const onPickImport = async (file: File | null) => {
+    setImportError("");
+    setImportResult("");
+    setImportPreview(null);
+    setImportSelected([]);
+    if (!file) return;
+    try {
+      const preview = await parseImportFile(file);
+      const summary = summarizeImport(preview.collections);
+      if (!summary.length) throw new Error("文件里没有可导入的模块数据");
+      setImportPreview(preview);
+      setImportSelected(summary.map((item) => item.collection));
+    } catch (error) {
+      setImportError((error as Error).message || "无法读取导入文件");
+    }
+  };
+  const runImport = async () => {
+    if (!importPreview || !importSelected.length) return;
+    setBusy("import");
+    setImportError("");
+    setImportResult("");
+    try {
+      const collections = Object.fromEntries(
+        importSelected
+          .map((name) => [name, importPreview.collections[name] ?? []] as const)
+          .filter(([, rows]) => rows.length > 0),
+      );
+      const result = await api.importCollections(collections, true);
+      const lines = Object.entries(result.summary).map(([name, stats]) => {
+        const label = collectionLabels[name] || name;
+        return `${label}：新增 ${stats.created}，跳过 ${stats.skipped}${stats.failed ? `，失败 ${stats.failed}` : ""}`;
+      });
+      setImportResult(`导入完成（已先做安全备份）。${lines.join("；")}`);
+      setImportPreview(null);
+      setImportSelected([]);
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["backups"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    } catch (error) {
+      setImportError((error as Error).message || "导入失败");
+    } finally {
+      setBusy("");
+    }
+  };
   const shutdownService = async () => {
     if (exitState === "saving" || exitState === "done") return;
     setExitState("saving");
@@ -53,7 +104,7 @@ export function SettingsPage() {
     void saveSetting("dashboardModules", next).catch(() => setDashboardModules(null));
   };
   return (
-    <div>
+    <div className="settings-page">
       <PageHeader icon={<ModuleArtwork module="settings" />} eyebrow="本机数据控制" title="数据与设置" description="查看数据文件、创建备份、恢复历史版本并调整使用偏好。" />
       <Section title="数据文件" description="业务数据保存在浏览器之外的独立 SQLite 文件中" action={<Button variant="secondary" onClick={() => void api.openDataDirectory()}><FolderOpen size={16} />打开数据目录</Button>}>
         <div className="data-file-panel"><div className="file-icon"><Database size={27} /></div><div className="file-copy"><strong>app.sqlite</strong><code>{status.dataFile.path}</code><div><span>{formatBytes(status.dataFile.size)}</span><span>修改于 {formatDateTime(status.dataFile.modifiedAt)}</span><Badge tone={status.dataFile.writable ? "success" : "warning"}><Check size={12} />{status.dataFile.writable ? "可读写" : "只读"}</Badge></div></div></div>
@@ -78,6 +129,48 @@ export function SettingsPage() {
           {backups.data?.length ? <div className="backup-list">{backups.data.map((backup) => <article key={backup.id}><div className="backup-type"><Archive size={18} /><Badge tone={backup.type === "safety" ? "warning" : backup.type === "automatic" ? "neutral" : "accent"}>{backup.type === "automatic" ? "自动" : backup.type === "safety" ? "安全" : "手动"}</Badge></div><div className="backup-copy"><input aria-label={`备份名称 ${formatDateTime(backup.createdAt)}`} defaultValue={backup.label} placeholder="添加备份名称" onBlur={(event) => { if (event.target.value.trim() !== backup.label) void run(() => api.updateBackup(backup.id, { label: event.target.value })); }} /><small>{formatDateTime(backup.createdAt)} · {formatBytes(backup.size)}</small></div><label className="keep-check"><input type="checkbox" checked={backup.keep} onChange={(event) => void run(() => api.updateBackup(backup.id, { keep: event.target.checked }))} />长期保留</label><Button variant="ghost" size="sm" onClick={() => setRestoreId(backup.id)}><ArrowCounterClockwise size={15} />恢复</Button></article>)}</div> : <EmptyState title="还没有备份" description="创建第一份完整备份。" />}
         </Section>
         <Section title="导出" description="生成包含 JSON 和各模块 CSV 的压缩包"><div className="export-panel"><DownloadSimple size={28} /><div><strong>完整数据导出</strong><p>适合人工查看和未来迁移，不替代完整备份。</p></div><Button variant="secondary" loading={busy === "export"} onClick={() => void exportAll()}>导出 ZIP</Button></div></Section>
+        <Section title="选择性导入" description="从导出 ZIP 或模块 CSV 补录；已存在的同 id 记录会跳过，不会覆盖。">
+          <div className="export-panel">
+            <UploadSimple size={28} />
+            <div>
+              <strong>导入导出包或 CSV</strong>
+              <p>导入前会自动创建安全备份。适合换机补录或恢复部分模块。</p>
+            </div>
+            <Button variant="secondary" onClick={() => importInput.current?.click()}>选择文件</Button>
+            <input ref={importInput} className="sr-only" type="file" accept=".zip,.csv,application/zip,text/csv" onChange={(event) => { void onPickImport(event.target.files?.[0] ?? null); event.target.value = ""; }} />
+          </div>
+          {importError ? <p className="field-error">{importError}</p> : null}
+          {importResult ? <p className="quiet-line">{importResult}</p> : null}
+          {importPreview ? (
+            <div className="import-preview">
+              <div className="import-preview-head">
+                <strong>选择要导入的模块</strong>
+                <small>来源：{importPreview.source === "zip" ? "导出 ZIP" : "模块 CSV"}</small>
+              </div>
+              <div className="import-collections">
+                {summarizeImport(importPreview.collections).map((item) => (
+                  <label key={item.collection}>
+                    <input
+                      type="checkbox"
+                      checked={importSelected.includes(item.collection)}
+                      onChange={(event) => {
+                        setImportSelected((current) => event.target.checked
+                          ? [...current, item.collection]
+                          : current.filter((name) => name !== item.collection));
+                      }}
+                    />
+                    <span>{collectionLabels[item.collection] || item.collection}</span>
+                    <Badge>{item.count}</Badge>
+                  </label>
+                ))}
+              </div>
+              <div className="import-actions">
+                <Button variant="ghost" onClick={() => { setImportPreview(null); setImportSelected([]); }}>取消</Button>
+                <Button loading={busy === "import"} disabled={!importSelected.length} onClick={() => void runImport()}>导入选中模块</Button>
+              </div>
+            </div>
+          ) : null}
+        </Section>
       </div>
       <Section title="使用偏好" description="设置会保存在主数据文件中">
         <div className="preferences">
@@ -85,6 +178,7 @@ export function SettingsPage() {
           <div><div><strong>界面主题</strong><small>选择适合长时间使用的明暗风格</small></div><div className="theme-toggle" role="group" aria-label="界面主题"><button className={(data.settings.theme ?? "light") === "light" ? "active" : ""} aria-pressed={(data.settings.theme ?? "light") === "light"} onClick={() => void saveSetting("theme", "light")}><Sun size={16} />浅色</button><button className={data.settings.theme === "dark" ? "active" : ""} aria-pressed={data.settings.theme === "dark"} onClick={() => void saveSetting("theme", "dark")}><Moon size={16} />深色</button></div></div>
           <label><div><strong>每周起始日</strong><small>影响今日计划的本周视图</small></div><select value={data.settings.weekStart ?? "monday"} onChange={(event) => void saveSetting("weekStart", event.target.value)}><option value="monday">星期一</option><option value="sunday">星期日</option></select></label>
           <label><div><strong>日期格式</strong><small>用于列表和时间线</small></div><select value={data.settings.dateFormat ?? "zh-CN"} onChange={(event) => void saveSetting("dateFormat", event.target.value)}><option value="zh-CN">中文日期</option><option value="iso">YYYY-MM-DD</option></select></label>
+          <label><div><strong>咨询久未沟通</strong><small>超过设定天数没有沟通记录的进行中项目会出现在首页「需要关注」</small></div><input type="number" min={1} max={365} step={1} value={Number(data.settings.consultingStaleDays ?? 14)} onChange={(event) => void saveSetting("consultingStaleDays", Number(event.target.value) || 14)} /></label>
           <fieldset className="dashboard-options"><legend><strong>首页模块摘要</strong><small>选择首页底部需要显示的模块</small></legend><div>{dashboardOptions.map((option) => <label key={option.value}><input type="checkbox" checked={visibleModules.includes(option.value)} onChange={(event) => toggleDashboardModule(option.value, event.target.checked)} />{option.label}</label>)}</div></fieldset>
         </div>
       </Section>

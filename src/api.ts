@@ -109,4 +109,9 @@ export const api = {
   updateBackup: (id: string, input: { label?: string; keep?: boolean }) => request<BackupRecord>(`/api/backups/${id}/metadata`, { method: "PATCH", body: JSON.stringify(input) }),
   restoreBackup: (id: string) => request<{ restored: boolean }>(`/api/backups/${id}/restore`, { method: "POST" }),
   exportAll: () => request<{ filename: string; path: string; size: number; downloadUrl: string }>("/api/export", { method: "POST" }),
+  importCollections: (collections: Partial<Record<CollectionName, Array<Record<string, unknown>>>>, safetyBackup = true) =>
+    request<{ summary: Record<string, { created: number; skipped: number; failed: number }> }>("/api/import", {
+      method: "POST",
+      body: JSON.stringify({ collections, safetyBackup }),
+    }),
 };
