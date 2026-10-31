@@ -4,20 +4,65 @@ import { Plus, Users, ChatCenteredText, Package, PhoneCall, Timer, CalendarPlus,
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import { formatDate, formatDateTime, formatDuration, localDate } from "../utils";
-import { Button, ConfirmDialog, EmptyState, EntityForm, Modal, PageHeader, Section, type FieldDefinition } from "../components/ui";
+import { Button, ConfirmDialog, EmptyState, PageHeader, Section } from "../components/ui";
 import { ModuleArtwork } from "../components/ModuleArtwork";
+import type { DialogState } from "./pageTypes";
+import { ConsultingDialog } from "./consulting/ConsultingDialog";
 
 export function ConsultingPage() {
   const { data, run } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const [clientId, setClientId] = useState<string | null>(data.clients[0]?.id ?? null);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<{ type: string; item?: Record<string, any> } | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
   const [deleteClientOpen, setDeleteClientOpen] = useState(false);
   useEffect(() => { if (!clientId || !data.clients.some((client) => client.id === clientId)) setClientId(data.clients[0]?.id ?? null); }, [clientId, data.clients]);
   const projects = data.consultingProjects.filter((item) => item.client_id === clientId);
   useEffect(() => { if (!projectId || !projects.some((item) => item.id === projectId)) setProjectId(projects[0]?.id ?? null); }, [projectId, projects]);
   useEffect(() => { const value = params.get("new"); if (value) setDialog({ type: value }); }, [params]);
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const client = data.clients.find((item) => item.id === focusId);
+    if (client) {
+      setClientId(client.id);
+      setProjectId(null);
+      setDialog({ type: "client", item: client });
+      setParams({});
+      return;
+    }
+    const project = data.consultingProjects.find((item) => item.id === focusId);
+    if (project) {
+      setClientId(project.client_id);
+      setProjectId(project.id);
+      setDialog({ type: "project", item: project });
+      setParams({});
+      return;
+    }
+    const deliverable = data.consultingDeliverables.find((item) => item.id === focusId);
+    if (deliverable) {
+      const parent = data.consultingProjects.find((item) => item.id === deliverable.project_id);
+      if (parent) { setClientId(parent.client_id); setProjectId(parent.id); }
+      setDialog({ type: "deliverable", item: deliverable });
+      setParams({});
+      return;
+    }
+    const followup = data.consultingFollowups.find((item) => item.id === focusId);
+    if (followup) {
+      const parent = data.consultingProjects.find((item) => item.id === followup.project_id);
+      if (parent) { setClientId(parent.client_id); setProjectId(parent.id); }
+      setDialog({ type: "followup", item: followup });
+      setParams({});
+      return;
+    }
+    const interaction = data.consultingInteractions.find((item) => item.id === focusId);
+    if (interaction) {
+      const parent = data.consultingProjects.find((item) => item.id === interaction.project_id);
+      if (parent) { setClientId(parent.client_id); setProjectId(parent.id); }
+      setDialog({ type: "interaction", item: interaction });
+      setParams({});
+    }
+  }, [data.clients, data.consultingDeliverables, data.consultingFollowups, data.consultingInteractions, data.consultingProjects, params, setParams]);
   const close = () => { setDialog(null); setParams({}); };
   const client = data.clients.find((item) => item.id === clientId);
   const project = data.consultingProjects.find((item) => item.id === projectId);
@@ -31,7 +76,7 @@ export function ConsultingPage() {
     <div>
       <PageHeader icon={<ModuleArtwork module="consulting" />} eyebrow="客户与交付" title="咨询工作" description="围绕客户、项目、沟通、交付和跟进组织咨询过程。" actions={<><Button variant="secondary" onClick={() => setDialog({ type: "client" })}><Users size={17} />添加客户</Button>{clientId ? <Button onClick={() => setDialog({ type: "project" })}><Plus size={17} />新建咨询项目</Button> : null}{client ? <Button variant="ghost" className="danger-text" onClick={() => setDeleteClientOpen(true)}><Trash size={16} />删除客户</Button> : null}</>} />
       {data.clients.length === 0 ? <EmptyState title="还没有客户记录" description="添加客户后，再创建咨询项目和跟进。" action={<Button onClick={() => setDialog({ type: "client" })}>添加第一个客户</Button>} /> : <div className="consult-layout">
-        <aside className="client-column"><span className="rail-label">客户</span>{data.clients.map((client) => <button className={client.id === clientId ? "active" : ""} key={client.id} onClick={() => { setClientId(client.id); setProjectId(null); }}><div className="client-avatar">{client.name.slice(0, 1)}</div><div><strong>{client.name}</strong><small>{data.consultingProjects.filter((item) => item.client_id === client.id && item.status === "active").length} 个进行中项目</small></div></button>)}</aside>
+        <aside className="client-column"><span className="rail-label">客户</span>{data.clients.map((entry) => <button className={entry.id === clientId ? "active" : ""} key={entry.id} onClick={() => { setClientId(entry.id); setProjectId(null); }}><div className="client-avatar">{entry.name.slice(0, 1)}</div><div><strong>{entry.name}</strong><small>{data.consultingProjects.filter((item) => item.client_id === entry.id && item.status === "active").length} 个进行中项目</small></div></button>)}</aside>
         <div className="consult-main">
           <div className="project-tabs">{projects.map((item) => <button key={item.id} className={item.id === projectId ? "active" : ""} onClick={() => setProjectId(item.id)}>{item.name}</button>)}{projects.length === 0 ? <span>该客户还没有项目</span> : null}</div>
           {project ? <>
@@ -55,18 +100,4 @@ export function ConsultingPage() {
       <ConfirmDialog open={deleteClientOpen} title="将客户移到回收站？" description={`“${client?.name ?? "当前客户"}”会从咨询页面隐藏；相关项目、沟通和交付记录会保留，恢复客户后可继续访问。`} confirmLabel="移到回收站" danger onClose={() => setDeleteClientOpen(false)} onConfirm={async () => { if (client) await run(() => api.remove("clients", client.id)); }} />
     </div>
   );
-}
-
-function ConsultingDialog({ dialog, close, clientId, project, run }: any) {
-  if (!dialog) return null;
-  const map: Record<string, { title: string; collection: any; fields: FieldDefinition[]; defaults: Record<string, any> }> = {
-    client: { title: "添加客户", collection: "clients", fields: [{ name: "name", label: "客户名称", required: true }, { name: "notes", label: "基础备注", type: "textarea" }], defaults: {} },
-    project: { title: "新建咨询项目", collection: "consultingProjects", fields: [{ name: "name", label: "项目名称", required: true }, { name: "current_need", label: "当前需求", type: "textarea" }, { name: "status", label: "状态", type: "select", required: true, options: [{ value: "active", label: "进行中" }, { value: "waiting", label: "等待中" }, { value: "completed", label: "已完成" }] }], defaults: { client_id: clientId, status: "active" } },
-    interaction: { title: "记录沟通", collection: "consultingInteractions", fields: [{ name: "occurred_at", label: "时间", type: "datetime-local", required: true }, { name: "interaction_type", label: "形式", type: "select", required: true, options: [{ value: "meeting", label: "会议" }, { value: "call", label: "电话" }, { value: "message", label: "消息" }] }, { name: "notes", label: "沟通记录", type: "textarea" }], defaults: { project_id: project?.id, occurred_at: new Date().toISOString().slice(0, 16), interaction_type: "meeting" } },
-    deliverable: { title: "添加交付物", collection: "consultingDeliverables", fields: [{ name: "name", label: "交付物名称", required: true }, { name: "due_date", label: "截止日期", type: "date" }], defaults: { project_id: project?.id, status: "todo" } },
-    followup: { title: "安排跟进", collection: "consultingFollowups", fields: [{ name: "followup_at", label: "跟进时间", type: "datetime-local", required: true }, { name: "content", label: "跟进内容", type: "textarea", required: true }], defaults: { project_id: project?.id, followup_at: `${localDate()}T10:00`, status: "todo" } },
-    time: { title: "记录咨询时长", collection: "consultingTimeEntries", fields: [{ name: "entry_date", label: "日期", type: "date", required: true }, { name: "minutes", label: "分钟", type: "number", required: true }, { name: "fee_cents", label: "费用（分）", type: "number", helper: "例如 120000 表示 1200 元" }, { name: "settled", label: "已经结算", type: "checkbox" }, { name: "notes", label: "备注", type: "textarea" }], defaults: { project_id: project?.id, entry_date: localDate(), minutes: 60, settled: false } },
-  };
-  const config = map[dialog.type] ?? map.followup;
-  return <Modal open title={config.title} description="记录会保存在当前电脑的数据文件中。" onClose={close}><EntityForm fields={config.fields} initial={{ ...config.defaults, ...dialog.item }} onCancel={close} onSubmit={async (values) => { await run(() => api.create(config.collection, { ...config.defaults, ...values })); close(); }} /></Modal>;
 }

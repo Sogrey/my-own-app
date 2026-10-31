@@ -6,18 +6,47 @@ import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import { MonthCalendar } from "../components/MonthCalendar";
 import { formatDate, localDate } from "../utils";
-import { Badge, Button, EmptyState, EntityForm, Modal, PageHeader, Section, type FieldDefinition } from "../components/ui";
+import { Badge, Button, EmptyState, PageHeader, Section } from "../components/ui";
 import { ModuleArtwork } from "../components/ModuleArtwork";
+import type { Entity, WorkspaceState } from "../types";
+import type { DialogState, WorkspaceRun } from "./pageTypes";
+import { FitnessDialog } from "./fitness/FitnessDialog";
+import { findPreviousSet, getWorkoutBodyPart, getWorkoutExerciseSummaries } from "./fitness/fitnessHelpers";
 
 export function FitnessPage() {
   const { data, run } = useWorkspace();
   const [params, setParams] = useSearchParams();
-  const [dialog, setDialog] = useState<{ type: string; item?: Record<string, any> } | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
   const [templateId, setTemplateId] = useState<string | null>(data.workoutTemplates[0]?.id ?? null);
   const [calendarMonth, setCalendarMonth] = useState(localDate().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(localDate());
   useEffect(() => { if (!templateId && data.workoutTemplates[0]) setTemplateId(data.workoutTemplates[0].id); }, [data.workoutTemplates, templateId]);
   useEffect(() => { const value = params.get("new"); if (value) setDialog({ type: value }); }, [params]);
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const workout = data.workouts.find((item) => item.id === focusId);
+    if (workout) {
+      setSelectedDate(workout.workout_date || localDate());
+      setCalendarMonth((workout.workout_date || localDate()).slice(0, 7));
+      if (workout.template_id) setTemplateId(workout.template_id);
+      setDialog({ type: "workout", item: workout });
+      setParams({});
+      return;
+    }
+    const template = data.workoutTemplates.find((item) => item.id === focusId);
+    if (template) {
+      setTemplateId(template.id);
+      setDialog({ type: "template", item: template });
+      setParams({});
+      return;
+    }
+    const metric = data.bodyMetrics.find((item) => item.id === focusId);
+    if (metric) {
+      setDialog({ type: "metric", item: metric });
+      setParams({});
+    }
+  }, [data.bodyMetrics, data.workoutTemplates, data.workouts, params, setParams]);
   const close = () => { setDialog(null); setParams({}); };
   const template = data.workoutTemplates.find((item) => item.id === templateId);
   const templateExercises = data.workoutTemplateExercises.filter((item) => item.template_id === templateId).sort((a, b) => a.sort_order - b.sort_order);
@@ -27,16 +56,7 @@ export function FitnessPage() {
   const selectedWorkouts = recentWorkouts.filter((item) => item.workout_date === selectedDate);
   const startWorkout = async () => {
     if (!template) return;
-    await run(async () => {
-      const workout = await api.create("workouts", { template_id: template.id, name: template.name, body_part: template.body_part, workout_date: localDate(), status: "in_progress", started_at: new Date().toISOString() });
-      for (const [index, exercise] of templateExercises.entries()) {
-        const actual = await api.create("workoutExercises", { workout_id: workout.id, name: exercise.name, sort_order: index });
-        for (let set = 1; set <= Number(exercise.target_sets || 1); set += 1) {
-          await api.create("workoutSets", { workout_exercise_id: actual.id, set_number: set, reps: exercise.target_reps, weight: exercise.target_weight, completed: 0 });
-        }
-      }
-      return workout;
-    });
+    await run(() => api.startWorkoutFromTemplate(template.id, localDate()));
   };
   const weightChart = [...data.bodyMetrics].sort((a, b) => a.metric_date.localeCompare(b.metric_date)).slice(-12).map((item) => ({ date: item.metric_date.slice(5), weight: item.weight }));
   return (
@@ -45,7 +65,7 @@ export function FitnessPage() {
       {activeWorkout ? <Section title={`正在训练 · ${activeWorkout.name}`} description={`开始于 ${new Date(activeWorkout.started_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`} action={<Button onClick={() => void run(() => api.update("workouts", activeWorkout.id, { status: "completed", completed_at: new Date().toISOString() }))}><Check size={16} />完成训练</Button>}>
         <div className="active-workout">{activeExercises.map((exercise) => {
           const sets = data.workoutSets.filter((item) => item.workout_exercise_id === exercise.id).sort((a, b) => a.set_number - b.set_number);
-          const previous = findPrevious(data, exercise.name, activeWorkout.id);
+          const previous = findPreviousSet(data, String(exercise.name), activeWorkout.id);
           return <article className="exercise-block" key={exercise.id}><header><div><Barbell size={19} /><h3>{exercise.name}</h3></div><small>{previous ? `上次：${previous.weight ?? 0} kg × ${previous.reps ?? 0}` : "第一次记录"}</small></header><div className="sets-table"><span>组</span><span>次数</span><span>重量 kg</span><span>完成</span>{sets.map((set) => <SetRow key={set.id} set={set} run={run} />)}</div></article>;
         })}</div>
       </Section> : null}
@@ -69,48 +89,31 @@ export function FitnessPage() {
   );
 }
 
-function SetRow({ set, run }: any) {
-  const [reps, setReps] = useState(set.reps ?? ""); const [weight, setWeight] = useState(set.weight ?? "");
-  return <><strong>{set.set_number}</strong><input aria-label={`第${set.set_number}组次数`} type="number" value={reps} onChange={(event) => setReps(event.target.value)} onBlur={() => void run(() => api.update("workoutSets", set.id, { reps: reps === "" ? null : Number(reps) }))} /><input aria-label={`第${set.set_number}组重量`} type="number" step="0.5" value={weight} onChange={(event) => setWeight(event.target.value)} onBlur={() => void run(() => api.update("workoutSets", set.id, { weight: weight === "" ? null : Number(weight) }))} /><button className={`set-check ${set.completed ? "active" : ""}`} onClick={() => void run(() => api.update("workoutSets", set.id, { completed: set.completed ? 0 : 1 }))}><Check size={14} /></button></>;
+function SetRow({ set, run }: { set: Entity; run: WorkspaceRun }) {
+  const [reps, setReps] = useState(set.reps ?? "");
+  const [weight, setWeight] = useState(set.weight ?? "");
+  return (
+    <>
+      <strong>{set.set_number}</strong>
+      <input aria-label={`第${set.set_number}组次数`} type="number" value={reps} onChange={(event) => setReps(event.target.value)} onBlur={() => void run(() => api.update("workoutSets", set.id, { reps: reps === "" ? null : Number(reps) }))} />
+      <input aria-label={`第${set.set_number}组重量`} type="number" step="0.5" value={weight} onChange={(event) => setWeight(event.target.value)} onBlur={() => void run(() => api.update("workoutSets", set.id, { weight: weight === "" ? null : Number(weight) }))} />
+      <button className={`set-check ${set.completed ? "active" : ""}`} onClick={() => void run(() => api.update("workoutSets", set.id, { completed: set.completed ? 0 : 1 }))}><Check size={14} /></button>
+    </>
+  );
 }
 
-function findPrevious(data: any, name: string, currentWorkoutId: string) {
-  const exercise = data.workoutExercises.find((item: any) => item.name === name && item.workout_id !== currentWorkoutId);
-  if (!exercise) return null;
-  return data.workoutSets.find((item: any) => item.workout_exercise_id === exercise.id && item.completed) ?? null;
-}
-
-function FitnessDialog({ dialog, close, template, run }: any) {
-  if (!dialog) return null;
-  const configs: Record<string, { title: string; collection: any; fields: FieldDefinition[]; defaults: any }> = {
-    template: { title: "新建训练模板", collection: "workoutTemplates", fields: [{ name: "name", label: "模板名称", required: true }, { name: "body_part", label: "训练部位", required: true, placeholder: "例如：胸部、背部、腿部" }, { name: "weekday", label: "计划星期（1-7）", type: "number" }, { name: "notes", label: "说明", type: "textarea" }], defaults: {} },
-    exercise: { title: "添加训练动作", collection: "workoutTemplateExercises", fields: [{ name: "name", label: "动作名称", required: true }, { name: "target_sets", label: "目标组数", type: "number", required: true }, { name: "target_reps", label: "目标次数", type: "number" }, { name: "target_weight", label: "目标重量 kg", type: "number", step: "0.5" }, { name: "rest_seconds", label: "休息秒数", type: "number" }], defaults: { template_id: template?.id, target_sets: 3 } },
-    workout: { title: "安排一次训练", collection: "workouts", fields: [{ name: "name", label: "训练名称", required: true }, { name: "body_part", label: "训练部位", required: true, placeholder: "例如：胸部、背部、腿部" }, { name: "workout_date", label: "日期", type: "date", required: true }, { name: "feeling", label: "备注", type: "textarea" }], defaults: { template_id: template?.id, name: template?.name ?? "自主训练", body_part: template?.body_part ?? "", workout_date: localDate(), status: "planned" } },
-    metric: { title: "记录身体数据", collection: "bodyMetrics", fields: [{ name: "metric_date", label: "日期", type: "date", required: true }, { name: "weight", label: "体重 kg", type: "number", step: "0.1" }, { name: "waist", label: "腰围 cm", type: "number", step: "0.1" }, { name: "chest", label: "胸围 cm", type: "number", step: "0.1" }, { name: "body_fat", label: "体脂 %", type: "number", step: "0.1" }, { name: "notes", label: "备注", type: "textarea" }], defaults: { metric_date: localDate() } },
-  };
-  const config = configs[dialog.type] ?? configs.workout;
-  return <Modal open title={config.title} onClose={close}><EntityForm fields={config.fields} initial={{ ...config.defaults, ...dialog.item }} onCancel={close} onSubmit={async (values) => { await run(() => api.create(config.collection, { ...config.defaults, ...values })); close(); }} /></Modal>;
-}
-
-function WorkoutCalendarDay({ date, data }: { date: string; data: any }) {
-  const workouts = data.workouts.filter((item: any) => item.workout_date === date);
+function WorkoutCalendarDay({ date, data }: { date: string; data: WorkspaceState }) {
+  const workouts = data.workouts.filter((item) => item.workout_date === date);
   if (!workouts.length) return null;
-  return <>{workouts.slice(0, 2).map((workout: any) => <div className={`calendar-entry workout-${workout.status}`} key={workout.id}><strong>{getWorkoutBodyPart(data, workout)}</strong><span>{getWorkoutExerciseSummaries(data, workout).slice(0, 2).join(" · ") || workout.name}</span></div>)}{workouts.length > 2 ? <small className="calendar-more">另有 {workouts.length - 2} 次</small> : null}</>;
-}
-
-function getWorkoutBodyPart(data: any, workout: any): string {
-  const template = data.workoutTemplates.find((item: any) => item.id === workout.template_id);
-  return workout.body_part || template?.body_part || workout.name || "训练";
-}
-
-function getWorkoutExerciseSummaries(data: any, workout: any): string[] {
-  const actualExercises = data.workoutExercises.filter((item: any) => item.workout_id === workout.id).sort((a: any, b: any) => a.sort_order - b.sort_order);
-  if (actualExercises.length) return actualExercises.map((exercise: any) => {
-    const sets = data.workoutSets.filter((item: any) => item.workout_exercise_id === exercise.id);
-    const completedSets = sets.filter((item: any) => Boolean(item.completed));
-    const countedSets = completedSets.length ? completedSets : workout.status === "completed" ? sets : [];
-    const repetitions = countedSets.reduce((sum: number, set: any) => sum + Number(set.reps || 0), 0);
-    return repetitions ? `${exercise.name} ${repetitions}次` : exercise.name;
-  });
-  return data.workoutTemplateExercises.filter((item: any) => item.template_id === workout.template_id).sort((a: any, b: any) => a.sort_order - b.sort_order).map((exercise: any) => `${exercise.name} ${exercise.target_sets || 1}×${exercise.target_reps || "自定"}`);
+  return (
+    <>
+      {workouts.slice(0, 2).map((workout) => (
+        <div className={`calendar-entry workout-${workout.status}`} key={workout.id}>
+          <strong>{getWorkoutBodyPart(data, workout)}</strong>
+          <span>{getWorkoutExerciseSummaries(data, workout).slice(0, 2).join(" · ") || workout.name}</span>
+        </div>
+      ))}
+      {workouts.length > 2 ? <small className="calendar-more">另有 {workouts.length - 2} 次</small> : null}
+    </>
+  );
 }
