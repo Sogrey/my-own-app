@@ -45,9 +45,44 @@ describe("buildDashboard", () => {
 
     const dashboard = buildDashboard(store, "2026-08-02");
     expect(dashboard.attention.map((item: { attention_type: string }) => item.attention_type)).toEqual(
-      expect.arrayContaining(["overdue", "followup", "workout"]),
+      expect.arrayContaining(["overdue", "followup", "workout", "stale-consulting"]),
     );
+    expect(dashboard.attention.find((item: { attention_type: string }) => item.attention_type === "stale-consulting").attention_reason).toContain("超过 14 天未沟通");
     expect(dashboard.summaries.entertainment).toEqual([expect.objectContaining({ name: "游戏" })]);
+  });
+
+  it("surfaces playing entertainment next goals as soft attention", () => {
+    const harness = createTestStore("dashboard-entertainment");
+    directory = harness.directory;
+    close = () => harness.manager.close();
+    const { store } = harness;
+
+    store.create("entertainmentItems", { name: "黑神话", status: "playing", next_goal: "打通第三章" });
+    store.create("entertainmentItems", { name: "想玩清单", status: "wishlist", next_goal: "有空再开" });
+
+    const dashboard = buildDashboard(store, "2026-08-02");
+    const goals = dashboard.attention.filter((item: { attention_type: string }) => item.attention_type === "entertainment-goal");
+    expect(goals).toHaveLength(1);
+    expect(goals[0]).toMatchObject({ name: "黑神话", attention_reason: "下次目标：打通第三章" });
+  });
+
+  it("respects consultingStaleDays when flagging inactive projects", () => {
+    const harness = createTestStore("dashboard-stale");
+    directory = harness.directory;
+    close = () => harness.manager.close();
+    const { store } = harness;
+
+    store.setSettings({ consultingStaleDays: 7 });
+    const client = store.create("clients", { name: "客户乙" });
+    const fresh = store.create("consultingProjects", { client_id: client.id, name: "仍活跃", status: "active" });
+    const stale = store.create("consultingProjects", { client_id: client.id, name: "已沉默", status: "active" });
+    store.create("consultingInteractions", { project_id: fresh.id, occurred_at: "2026-08-01T10:00:00.000Z", interaction_type: "call", notes: "刚聊过" });
+    store.create("consultingInteractions", { project_id: stale.id, occurred_at: "2026-07-20T10:00:00.000Z", interaction_type: "call", notes: "很久以前" });
+
+    const dashboard = buildDashboard(store, "2026-08-02");
+    const staleItems = dashboard.attention.filter((item: { attention_type: string }) => item.attention_type === "stale-consulting");
+    expect(staleItems.map((item: { name: string }) => item.name)).toEqual(["已沉默"]);
+    expect(staleItems[0].attention_reason).toContain("超过 7 天未沟通");
   });
 
   it("uses live source titles for linked plan items", () => {

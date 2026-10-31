@@ -394,9 +394,9 @@ test("creates media content and finds it through global search", async ({ page }
   await page.getByLabel(/制作阶段/).selectOption("producing");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("可搜索的内容灵感")).toBeVisible();
-  await page.getByRole("button", { name: /搜索所有内容/ }).click();
-  await page.getByPlaceholder("输入关键词").fill("可搜索");
-  await expect(page.getByRole("button", { name: "可搜索的内容灵感", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /搜索与命令/ }).click();
+  await page.getByPlaceholder("输入命令或关键词").fill("可搜索");
+  await expect(page.getByRole("option", { name: /可搜索的内容灵感/ })).toBeVisible();
   await page.keyboard.press("Escape");
   const card = page.locator(".media-card").filter({ hasText: "可搜索的内容灵感" });
   await card.locator(".icon-button").click();

@@ -72,7 +72,7 @@ describe("specialized life modules", () => {
     expect(state.nutritionTargets[0].protein).toBe(132);
   });
 
-  it("tracks entertainment status and play sessions without overdue attention", async () => {
+  it("tracks entertainment status and surfaces next goals as soft attention", async () => {
     const game = await create("entertainmentItems", { name: "星海旅人", platform: "Steam", activity_type: "game", status: "wishlist", next_goal: "完成序章" });
     await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/entertainmentItems/${game.id}`, payload: { status: "playing", progress: "第一章", rating: 8.5 } });
     await create("playSessions", { entertainment_id: game.id, started_at: "2026-08-02T19:00:00.000Z", ended_at: "2026-08-02T20:37:00.000Z", duration_minutes: 97, progress_note: "到达新城市" });
@@ -80,6 +80,8 @@ describe("specialized life modules", () => {
     expect(state.entertainmentItems[0]).toMatchObject({ status: "playing", progress: "第一章", rating: 8.5 });
     expect(state.playSessions[0]).toMatchObject({ duration_minutes: 97, progress_note: "到达新城市" });
     const dashboard = (await app.inject({ method: "GET", url: "/api/dashboard?date=2026-08-03" })).json().data;
-    expect(dashboard.attention.some((item: any) => item.module === "entertainment")).toBe(false);
+    const soft = dashboard.attention.find((item: any) => item.attention_type === "entertainment-goal");
+    expect(soft).toMatchObject({ name: "星海旅人", attention_reason: "下次目标：完成序章" });
+    expect(dashboard.attention.some((item: any) => item.module === "entertainment" && item.attention_type === "overdue")).toBe(false);
   });
 });
