@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, BowlFood, ForkKnife, Copy, Target, CalendarBlank } from "@phosphor-icons/react";
+import { Plus, BowlFood, ForkKnife, Copy, Target, CalendarBlank, CalendarPlus } from "@phosphor-icons/react";
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import { MonthCalendar } from "../components/MonthCalendar";
-import { addDays, localDate } from "../utils";
+import { addDays, classNames, localDate } from "../utils";
+import { todayPlanPayload } from "../planLink";
 import { Badge, Button, EmptyState, PageHeader, Section } from "../components/ui";
 import { ModuleArtwork } from "../components/ModuleArtwork";
 import type { WorkspaceState } from "../types";
 import type { DialogState } from "./pageTypes";
 import { DietDialog } from "./diet/DietDialog";
 import { mealTypes } from "./diet/dietConstants";
+import { nutritionDelta } from "../features/nutritionDelta";
 
 export function DietPage() {
   const { data, run } = useWorkspace();
@@ -70,11 +72,11 @@ export function DietPage() {
       <div className="meal-columns">{mealTypes.map((type) => {
         const entries = meals.filter((meal) => meal.meal_type === type.value);
         return <Section key={type.value} title={type.label} description={entries.length ? `${entries.length} 条计划或记录` : "尚未安排"} action={<Button variant="ghost" size="sm" onClick={() => setDialog({ type: "meal", item: { meal_type: type.value } })}><Plus size={14} /></Button>}>
-          {entries.length ? <div className="meal-list">{entries.map((meal) => { const items = data.mealItems.filter((item) => item.meal_id === meal.id); return <article key={meal.id}><div className="meal-heading"><div><Badge tone={meal.entry_kind === "actual" ? "success" : "neutral"}>{meal.entry_kind === "actual" ? "实际" : "计划"}</Badge><strong>{meal.name}</strong></div><button className="text-button" onClick={() => setDialog({ type: "mealItem", item: { meal_id: meal.id } })}>添加食物</button></div>{items.length ? <ul>{items.map((item) => <li key={item.id}><span>{item.food_name} × {item.quantity}</span><small>{item.calories !== null ? `${item.calories} kcal` : "营养未知"}</small></li>)}</ul> : <p>还没有食物明细</p>}</article>; })}</div> : <div className="meal-empty"><BowlFood size={24} /><span>点击添加餐食</span></div>}
+          {entries.length ? <div className="meal-list">{entries.map((meal) => { const items = data.mealItems.filter((item) => item.meal_id === meal.id); return <article key={meal.id}><div className="meal-heading"><div><Badge tone={meal.entry_kind === "actual" ? "success" : "neutral"}>{meal.entry_kind === "actual" ? "实际" : "计划"}</Badge><strong>{meal.name}</strong></div><div className="meal-heading-actions"><button className="text-button" onClick={() => setDialog({ type: "mealItem", item: { meal_id: meal.id } })}>添加食物</button><button className="text-button" title="加入今日计划" onClick={() => void run(() => api.create("planItems", todayPlanPayload({ title: `饮食：${meal.name}`, sourceModule: "diet", sourceEntityType: "meal", sourceEntityId: meal.id, priority: "low" })))}><CalendarPlus size={14} />加入今日</button></div></div>{items.length ? <ul>{items.map((item) => <li key={item.id}><span>{item.food_name} × {item.quantity}</span><small>{item.calories !== null ? `${item.calories} kcal` : "营养未知"}</small></li>)}</ul> : <p>还没有食物明细</p>}</article>; })}</div> : <div className="meal-empty"><BowlFood size={24} /><span>点击添加餐食</span></div>}
         </Section>;
       })}</div>
       <Section title="常用食物" description="手动维护，运行时不依赖在线食物数据库">
-        {data.foods.length ? <div className="food-chips">{data.foods.map((item) => <button key={item.id} onClick={() => setDialog({ type: "food", item })}><strong>{item.name}</strong><small>{item.calories !== null ? `${item.calories} kcal / ${item.default_portion || 1}${item.portion_unit}` : "未填写营养"}</small></button>)}</div> : <EmptyState title="还没有常用食物" description="添加经常吃的食物，之后记录会更快。" />}
+        {data.foods.length ? <div className="food-chips">{data.foods.map((item) => <button key={item.id} onClick={() => setDialog({ type: "food", item })}><strong>{item.name}</strong><small>{item.calories !== null ? `${item.calories} kcal / ${item.default_portion || 1}${item.portion_unit}` : "未填写营养"}</small></button>)}</div> : <EmptyState title="还没有常用食物" description="添加经常吃的食物，之后记录会更快。" hint="营养可以先留空，只记名字也行" action={<Button variant="secondary" size="sm" onClick={() => setDialog({ type: "food" })}>添加食物</Button>} />}
       </Section>
       <DietDialog dialog={dialog} close={close} date={date} foods={data.foods} run={run} />
     </div>
@@ -98,5 +100,15 @@ function MealCalendarDay({ date, data }: { date: string; data: WorkspaceState })
 
 function NutritionMetric({ label, value, target, unit }: { label: string; value: number; target?: number; unit: string }) {
   const percent = target ? Math.min(100, Math.round((value / target) * 100)) : 0;
-  return <div className="nutrition-metric"><div><span>{label}</span><strong>{Math.round(value)} <small>/ {target ? Math.round(target) : "未设"} {unit}</small></strong></div><div className="mini-progress"><span style={{ width: `${percent}%` }} /></div></div>;
+  const delta = nutritionDelta(value, target);
+  return (
+    <div className={classNames("nutrition-metric", `delta-${delta.tone}`)}>
+      <div>
+        <span>{label}</span>
+        <strong>{Math.round(value)} <small>/ {target ? Math.round(target) : "未设"} {unit}</small></strong>
+        <em>{delta.label}{delta.remaining !== null && delta.tone !== "ok" ? ` ${unit}` : ""}</em>
+      </div>
+      <div className="mini-progress"><span style={{ width: `${percent}%` }} /></div>
+    </div>
+  );
 }
