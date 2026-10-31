@@ -139,20 +139,22 @@ export function AppLayout() {
         </div>
       </aside>
       <div className="app-main">
-        <header className="topbar glass-clear">
-          <div className="topbar-left">
-            <IconButton label={collapsed ? "展开导航" : "收起导航"} onClick={() => setCollapsed((value) => !value)}><SidebarSimple size={20} /></IconButton>
-            <span className="toolbar-page-icon" data-tone={currentPage.tone} aria-hidden="true"><ModuleArtwork module={currentPage.module} /></span>
-            <div className="toolbar-context"><strong>{currentPage.label}</strong><span>{new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</span></div>
-            {appearance === "neo" ? <span className="topbar-index">{currentPage.index} / 08</span> : null}
-          </div>
-          <div className="topbar-actions">
-            <button className="search-trigger glass-clear" aria-label="搜索与命令" title="搜索与命令" onClick={() => setCommandOpen(true)}><MagnifyingGlass size={18} /><span>搜索与命令</span><kbd><Command size={12} />K</kbd></button>
-            <Button className="topbar-create" variant="secondary" size="sm" title="快速新建" aria-label="快速新建" onClick={() => setQuickOpen(true)}><Plus size={16} /><span className="label">快速新建</span></Button>
-            <Button className="manual-save" variant="secondary" size="sm" title="手动保存" aria-label="手动保存" loading={saveStatus === "saving"} onClick={() => void saveNow().catch(() => undefined)}><FloppyDisk size={16} /><span className="label">手动保存</span></Button>
-            <SaveIndicator status={saveStatus} />
-          </div>
-        </header>
+        <div className="topbar-slot">
+          <header className="topbar glass-clear">
+            <div className="topbar-left">
+              <IconButton label={collapsed ? "展开导航" : "收起导航"} onClick={() => setCollapsed((value) => !value)}><SidebarSimple size={20} /></IconButton>
+              <span className="toolbar-page-icon" data-tone={currentPage.tone} aria-hidden="true"><ModuleArtwork module={currentPage.module} /></span>
+              <div className="toolbar-context"><strong>{currentPage.label}</strong><span>{new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</span></div>
+              {appearance === "neo" ? <span className="topbar-index">{currentPage.index} / 08</span> : null}
+            </div>
+            <div className="topbar-actions">
+              <button className="search-trigger glass-clear" aria-label="搜索与命令" title="搜索与命令" onClick={() => setCommandOpen(true)}><MagnifyingGlass size={18} /><span>搜索与命令</span><kbd><Command size={12} />K</kbd></button>
+              <Button className="topbar-create" variant="secondary" size="sm" title="快速新建" aria-label="快速新建" onClick={() => setQuickOpen(true)}><Plus size={16} /><span className="label">快速新建</span></Button>
+              <Button className="manual-save" variant="secondary" size="sm" title="手动保存" aria-label="手动保存" loading={saveStatus === "saving"} onClick={() => void saveNow().catch(() => undefined)}><FloppyDisk size={16} /><span className="label">手动保存</span></Button>
+              <SaveIndicator status={saveStatus} />
+            </div>
+          </header>
+        </div>
         <main className="page-container" id="main-content" tabIndex={-1}>
           {loading ? <Skeleton lines={8} /> : error ? (
             <ErrorState message={error} onRetry={() => void refresh().catch(() => undefined)} />

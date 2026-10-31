@@ -185,7 +185,9 @@
 /* --- 3. App shell and sidebar -------------------------------------------- */
 
 :root[data-appearance="notebook"] .app-shell {
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 0;
   background: var(--bg);
@@ -344,17 +346,31 @@
 
 /* --- 4. Top bar and content grid ----------------------------------------- */
 
-:root[data-appearance="notebook"] .topbar {
-  position: sticky;
-  top: 0;
+:root[data-appearance="notebook"] .app-main {
+  min-height: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+:root[data-appearance="notebook"] .topbar-slot {
+  flex: 0 0 auto;
   z-index: var(--z-toolbar);
+  padding: 0;
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-appearance="notebook"] .topbar {
+  position: relative;
+  top: auto;
   height: 48px;
   margin: 0;
   padding: 0 18px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
-  background: var(--bg);
+  background: transparent;
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -426,10 +442,14 @@
 }
 
 :root[data-appearance="notebook"] .page-container {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   max-width: 1420px;
   margin: 0 auto;
   padding: 42px 64px 80px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 :root[data-appearance="notebook"] .page-container > div { animation: notion-page-in 180ms var(--ease-out) both; }
@@ -1059,6 +1079,7 @@
   :root[data-appearance="notebook"] .nav-group { display: contents; }
   :root[data-appearance="notebook"] .nav-link { flex: 0 0 34px; width: 34px; height: 34px; }
   :root[data-appearance="notebook"] .sidebar-foot { display: none; }
+  :root[data-appearance="notebook"] .topbar-slot { flex: 0 0 auto; }
   :root[data-appearance="notebook"] .topbar { position: relative; height: 46px; padding: 0 12px; }
   :root[data-appearance="notebook"] :is(.topbar-create, .manual-save, .save-indicator) { display: none; }
   :root[data-appearance="notebook"] .page-container { padding: 24px 16px 52px; }

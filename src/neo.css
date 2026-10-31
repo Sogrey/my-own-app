@@ -155,6 +155,7 @@
 
 .neo-shell {
   width: 100%;
+  height: 100dvh;
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 258px minmax(0, 1fr);
@@ -162,6 +163,7 @@
   padding: 0;
   background: transparent;
   isolation: isolate;
+  overflow: hidden;
 }
 
 /* Neo 是纯平印刷表面。统一关闭目标项目原有组件可能携带的玻璃滤镜，
@@ -367,22 +369,36 @@
 
 /* Top command bar -------------------------------------------------------- */
 
-.neo-shell .app-main { min-width: 0; }
+.neo-shell .app-main {
+  min-width: 0;
+  min-height: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.neo-shell .topbar-slot {
+  flex: 0 0 auto;
+  z-index: var(--z-toolbar);
+  padding: 0;
+  background: color-mix(in srgb, var(--neo-sheet) 95%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 .neo-shell .topbar {
-  position: sticky;
-  top: 0;
+  position: relative;
+  top: auto;
   min-height: 78px;
   margin: 0;
   padding: 12px 28px;
   border: 0;
   border-bottom: var(--neo-line-heavy);
   border-radius: 0;
-  background: color-mix(in srgb, var(--neo-sheet) 95%, transparent);
+  background: transparent;
   background-image: none;
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  z-index: var(--z-toolbar);
 }
 
 .neo-shell .topbar-left { gap: 14px; }
@@ -418,10 +434,14 @@
 /* Page composition ------------------------------------------------------- */
 
 .neo-shell .page-container {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
   padding: 40px 42px 86px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .neo-shell .page-container > div { animation: neo-page-in 420ms var(--ease-out) both; }
@@ -1093,7 +1113,8 @@
   .neo-shell .nav-group { display: contents; }
   .neo-shell .nav-label { display: none; }
   .neo-shell .nav-link { flex: 0 0 auto; min-height: 36px; margin: 0; }
-  .neo-shell .topbar { position: sticky; top: 0; }
+  .neo-shell .topbar-slot { flex: 0 0 auto; }
+  .neo-shell .topbar { position: relative; }
   .neo-shell .dashboard-grid,
   .neo-shell .fitness-grid,
   .neo-shell .settings-grid,
