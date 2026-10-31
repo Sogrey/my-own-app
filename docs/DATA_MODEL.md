@@ -23,7 +23,7 @@
 
 ## 删除和完整性
 
-普通删除写入 `deleted_at` 并在 `trash_entries` 建立可读索引；回收站恢复会清除软删除标记。永久删除是独立接口，界面必须通过二次确认后调用。SQLite 启用外键、WAL、`synchronous=FULL`、写入忙等待和迁移事务。
+普通删除写入 `deleted_at` 并在 `trash_entries` 建立可读索引；回收站恢复会清除软删除标记。软删除**不会**自动级联子记录（例如隐藏客户后，相关项目仍可访问）。永久删除是独立接口，界面必须通过二次确认后调用；父行硬删时依赖外键 `ON DELETE CASCADE` 清除子行，应用层会同步清理子树的 `trash_entries`。SQLite 启用外键、WAL、`synchronous=FULL`、写入忙等待和迁移事务。
 
 ## 备份元数据
 

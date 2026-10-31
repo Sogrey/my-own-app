@@ -16,7 +16,7 @@
 | AC-010 | `persistence.test.ts` 制造 SQLite 只读错误；组件测试验证顶部显示“保存失败” |
 | AC-011–AC-013 | `planning-dashboard.test.ts` 与 E2E 验证时间线、待安排、完成状态和进度联动 |
 | AC-014–AC-015 | E2E 验证来源标题实时更新和“打开来源”；集成测试验证无标题副本漂移 |
-| AC-016 | E2E 访问首页摘要目标；Dashboard 摘要按钮直接使用模块来源路由 |
+| AC-016 | E2E 访问首页摘要目标；Dashboard 摘要与「打开来源」使用 `?focus=id` deep-link 打开对应记录 |
 | AC-017 | `planning-dashboard.test.ts` 验证备忘转换与归档；首页组件使用延时自动保存并显示失败 |
 | AC-018 | `planning-dashboard.test.ts` 和 E2E 覆盖日期、时间、时长、优先级、完成、取消与延期接口/界面 |
 | AC-019 | `work-modules.test.ts` 覆盖五阶段、发布链接和三项表现数据；E2E 覆盖实际页面 |
