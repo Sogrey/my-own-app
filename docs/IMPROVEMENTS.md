@@ -7,14 +7,18 @@
 ## 执行顺序
 
 ```text
-P0 本机安全与删除语义
- → P0 类型校验起步
- → P1 假设置 / deep-link / 增量状态
- → P1 测试分层与锁文件
- → P2 体验与体验收尾
+P0–P2  正确性 / 本机安全 / 体验收尾     ✅ 已完成（P2-5 延期）
+P3A–P3D 产品增强（当天闭环 → 少跳页 → 模块加深 → 观感工程）  ✅ 已完成
+ → 下一阶段：日常打磨 / 验收对照 / 可选 P4（见文末「下一步」）
 ```
 
-当前进度：**P0–P2 清单已清完（P2-5 延期，非 MVP）**。
+当前进度：**P0～P3 清单已完成**（P2-5 仍延期）。近期追加：**首页轻重缓急四象限**（见变更记录）。
+
+产品增强原则：
+
+1. 继续坚持本机单用户、无云同步、无多端（见 PRD §8）。
+2. 优先「少跳页、少填表、当天事在首页闭环」，而不是再堆新模块。
+3. 不为填满页面增加无意义统计；提醒需说明来源与原因。
 
 ---
 
@@ -25,7 +29,7 @@ P0 本机安全与删除语义
 | P0-1 | 写操作缺少 Origin 时仍放行 | 已完成 | `server/app.ts` | 写操作必须带本机 `Origin`；补「无 Origin → 403」测试 |
 | P0-2 | `open-path` 可打开任意本机路径 | 已完成 | `server/app.ts` | 仅允许数据目录内路径，或已保存的 `dev_projects.local_path` |
 | P0-3 | 永久删除与 FK `CASCADE` 语义不清 | 已完成 | `server/store.ts`、`collections.ts` | 软删不级联；永久删清理子树 trash；设置页提示关联删除 |
-| P0-4 | `Entity = any`、字段几乎无类型校验 | 已完成（起步） | `server/validation.ts`、`store.ts` | 已为 planItems / mediaContents / 已知 settings 补 Zod；其余集合后续扩展 |
+| P0-4 | `Entity = any`、字段几乎无类型校验 | 已完成（起步） | `server/validation.ts`、`store.ts` | 已为 planItems / mediaContents / 已知 settings 补 Zod；其余集合见 P3-16 |
 
 ---
 
@@ -36,10 +40,10 @@ P0 本机安全与删除语义
 | P1-1 | `weekStart` / `dateFormat` 保存但不生效 | 已完成 | `SettingsPage`、`utils.ts`、`TodayPage`、`DashboardPage` | 格式化与本周视图真正读设置 |
 | P1-2 | 搜索 / 摘要 / 打开来源只跳模块页 | 已完成 | `moduleRoutes.ts`、`Layout.tsx`、各页面 | 统一 `?focus=id`；页面挂载后打开对应记录 |
 | P1-3 | 每次写操作全量 `/api/state` | 已完成 | `api.ts`、`workspaceState.ts`、`WorkspaceContext` | 写接口 emit mutation，本地 patch；仅刷新 dashboard 等派生查询 |
-| P1-4 | 页面巨型 JSX + `props: any` | 已完成（起步） | `pages/*/Dialog.tsx`、`pageTypes.ts`、`moduleRoutes` | 拆出健身/饮食/咨询 Dialog 与健身 helpers；共享来源标签；Dialog 类型收紧 |
-| P1-5 | 测试偏重 E2E、领域单测不足 | 已完成（起步） | `tests/unit`、`docs/TESTING.md`、e2e describe | 补 store/dashboard 单测；E2E 分外观/业务组；补充测试分层文档 |
+| P1-4 | 页面巨型 JSX + `props: any` | 已完成（起步） | `pages/*/Dialog.tsx`、`pageTypes.ts` | 拆出健身/饮食/咨询 Dialog；其余见 P3-17 |
+| P1-5 | 测试偏重 E2E、领域单测不足 | 已完成（起步） | `tests/unit`、`docs/TESTING.md` | 补 store/dashboard 单测与分层说明；继续下沉见 P3-18 |
 | P1-6 | 同时存在 npm / pnpm 锁文件 | 已完成 | 仓库根 | 以 pnpm 为主（`pnpm-lock.yaml` + `packageManager`）；忽略 `package-lock.json` |
-| P1-7 | 软删无 Undo；延期仅「明天」；备忘转换过窄 | 已完成 | WorkspaceContext、TodayPage、DashboardPage | 软删底部 Undo；延期可选日期；备忘可转客户/娱乐/训练模板/食材 |
+| P1-7 | 软删无 Undo；延期仅「明天」；备忘转换过窄 | 已完成 | WorkspaceContext、TodayPage、DashboardPage | 软删 Undo；延期可选日期；备忘可转多模块 |
 
 ---
 
@@ -47,11 +51,87 @@ P0 本机安全与删除语义
 
 | ID | 项 | 状态 | 方向 |
 | --- | --- | --- | --- |
-| P2-1 | 工作区加载失败时业务页当空数据 | 已完成 | `Layout.tsx` | 加载中骨架；失败显示 `ErrorState` + 重试，不再渲染空业务页 |
-| P2-2 | 开始训练连环 `create` | 已完成 | `store.startWorkoutFromTemplate`、`/api/workouts/from-template` | 单接口事务实例化训练/动作/组；前端一次调用 |
-| P2-3 | 搜索 `LIKE` 未转义 `%`/`_` | 已完成 | `store.search` | `%`/`_`/`\` 转义 + `ESCAPE '\\'`；单测覆盖 |
-| P2-4 | settings / CollectionName 双份定义 | 已完成 | `shared/schema.ts` | 集合名与已知设置枚举前后端共用；服务端 `satisfies` 对齐 |
-| P2-5 | 非签名安装包门槛 | 延期 | 发行流程 | 非 MVP：当前本机启动器足够；签名安装包留待正式分发时再做 |
+| P2-1 | 工作区加载失败时业务页当空数据 | 已完成 | `Layout.tsx`：加载骨架；失败 `ErrorState` + 重试 |
+| P2-2 | 开始训练连环 `create` | 已完成 | `/api/workouts/from-template` 单接口事务实例化 |
+| P2-3 | 搜索 `LIKE` 未转义 `%`/`_` | 已完成 | `store.search` 转义 + 单测 |
+| P2-4 | settings / CollectionName 双份定义 | 已完成 | `shared/schema.ts` 前后端共用 |
+| P2-5 | 非签名安装包门槛 | 延期 | 非 MVP；正式分发时再做 |
+
+---
+
+## P3 — 产品增强
+
+目标：在 MVP 可日常使用的基础上，把「填表式模块集合」推进成「当天可闭环的本机工作生活 OS」。
+
+### P3A — 当天闭环（优先）
+
+| ID | 项 | 状态 | 范围 | 方向 |
+| --- | --- | --- | --- | --- |
+| P3-1 | Cmd/Ctrl+K 仅搜索，缺少动作入口 | 已完成 | `commandPalette.ts`、`CommandPalette.tsx`、`Layout.tsx` | 命令面板：搜索 + 动作/新建/导航；空查询展示快捷命令 |
+| P3-2 | 快速新增不完整、新建仍多一步 | 已完成（起步） | `createCommands`、快速新增 | 补齐游戏娱乐；与命令面板共用新建清单；最小字段仍由各页表单承接 |
+| P3-3 | 「加入今日」未在各模块统一 | 已完成 | `planLink.ts`、各业务页 | `todayPlanPayload` 统一 source_*；健身/饮食补齐入口 |
+| P3-4 | 首页时间线偏只读摘要 | 已完成 | `DashboardPage.tsx` | 首页可完成、移到明天、打开来源 |
+
+### P3B — 少跳页与状态联动
+
+| ID | 项 | 状态 | 范围 | 方向 |
+| --- | --- | --- | --- | --- |
+| P3-5 | 详情多用 Modal，缺 PRD 侧栏 | 已完成 | Consulting / Development | `DetailPanel` + 列表选中；新建仍用 Modal；`?focus=` 打开侧栏 |
+| P3-6 | 完成今日事项后业务状态回写不清晰 | 已完成 | Dashboard / Today、`planComplete.ts` | 有来源时弹窗：仅完成计划 / 同步明确字段；无同步项的类型不打扰 |
+| P3-7 | 日终复盘入口弱 | 已完成 | Dashboard / Today、`dailyReview.ts` | 进度≥70% 或 ≥17 点且未写复盘时首页轻提示；`/today?review=1` 聚焦复盘 |
+
+### P3C — 模块加深与数据进出
+
+| ID | 项 | 状态 | 范围 | 方向 |
+| --- | --- | --- | --- | --- |
+| P3-8 | 自媒体缺发布排期视图 | 已完成 | Media、`mediaSchedule.ts` | 本周 7 日排期；无内容时只留空状态，不压空看板/空图表 |
+| P3-9 | 缺轻量周回顾 | 已完成 | Dashboard、`weekReview.ts` | 首页只读四格：完成率 / 训练 / 发布 / 跟进完成 |
+| P3-10 | 有导出无导入 | 已完成 | Settings、`/api/import`、`importPayload.ts` | 导出 ZIP / 模块 CSV 可选模块导入；同 id 跳过；导入前安全备份 |
+| P3-11 | 备忘转换后难回顾 | 已完成 | Dashboard、`memoArchive.ts` | 备忘箱：打开来源 / 恢复编辑 / 再次转出 |
+| P3-12 | 咨询「久未跟进」不可配置 | 已完成 | Settings、`dashboard.ts` | `consultingStaleDays`；关注项写明「超过 N 天未沟通」 |
+| P3-13 | 饮食相对目标反馈弱 | 已完成 | Diet、`nutritionDelta.ts` | 营养条显示还差/超出；进度条保留 |
+| P3-14 | 娱乐「下次目标」难进首页 | 已完成 | dashboard attention | 进行中且有 next_goal 的项进关注并写明目标；快速新增娱乐已在 P3-2 |
+
+### P3D — 观感与工程尾巴
+
+| ID | 项 | 状态 | 范围 | 方向 |
+| --- | --- | --- | --- | --- |
+| P3-15 | 空状态与操作反馈偏薄 | 已完成 | EmptyState、`notifySuccess` | 空状态 `hint`；完成/延期/转换成功 toast（与 Undo 同槽） |
+| P3-16 | 校验与类型仍偏窄 | 已完成 | `validation.ts` | 咨询/开发/饮食/娱乐/健身等高频集合纳入 Zod 枚举与数值校验 |
+| P3-17 | Media / Development / Today 仍然偏巨 | 已完成 | `pages/media|development|today` | 拆出排期/分析/看板、WorkItemRow、PlanTable 与字段常量 |
+| P3-18 | 领域规则仍偏依赖 E2E | 已完成 | `tests/unit` | 计划回写、加入今日、命令面板过滤/分段标题补单测 |
+| P3-19 | 三套外观间距/密度不统一 | 已完成 | `styles.css` | 语义 spacing token；设置页/偏好行更紧 |
+| P3-20 | 窄窗顶栏易挤 | 已完成 | `Layout.tsx`、`styles.css` | ≤1200px 新建/保存收为图标；≤980px 再藏页标 |
+
+### 建议落地批次
+
+| 批次 | 包含 | 预期体感 |
+| --- | --- | --- |
+| 第一批 | P3-1 → P3-4 | 键盘驱动 + 首页能干活 + 各模块进今日一致 |
+| 第二批 | P3-5 → P3-7 | 少开关窗、完成有回写、复盘不易漏 |
+| 第三批 | P3-8 → P3-14 | 模块更深、周回顾、可导入 |
+| 第四批 | P3-15 → P3-20 | 更顺眼、更好维护 |
+
+### 清单外已落地
+
+| 项 | 状态 | 范围 | 说明 |
+| --- | --- | --- | --- |
+| 首页轻重缓急四象限 | 已完成 | `eisenhowerMatrix.ts`、Dashboard、`plan_items.matrix_quadrant` | 今日未完成事项按重要×紧急归类；可格内调整；未手选时按 priority 推断；十字箭头轴对齐四格外边 |
+
+---
+
+## 下一步（建议）
+
+P3 已收尾，不必立刻再开大清单。按收益建议顺序：
+
+1. **日常验收与回归**：对照 [ACCEPTANCE.md](ACCEPTANCE.md) 走一遍本机写操作 Origin、软删/回收站、设置生效、导入导出；跑 `pnpm run test:unit`（必要时 `test:all`）。
+2. **四象限用几天再定**：是否需要拖拽换象限、把逾期事项并入矩阵、或弱化时间线/待安排避免与矩阵重复。
+3. **可选 P4（未立项，按需写入）**  
+   - 首页信息密度：四象限与时间线/待安排是否合并或折叠  
+   - 咨询/健身等剩余页继续拆组件（P1-4 / P3-17 同思路）  
+   - 更多领域单测下沉（import、dashboard attention）  
+   - P2-5 正式分发时再做签名安装包  
+4. **版本节奏**：若本地改动满意，可做一次提交/备份，作为「P3 完成 + 四象限」里程碑。
 
 ---
 
@@ -60,6 +140,8 @@ P0 本机安全与删除语义
 - AC-003：本机绑定与外部 Origin 拒绝 —— 收紧后需补「无 Origin」用例。
 - AC-027 / AC-028：软删、回收站、永久删除 —— P0-3 后软删仍不级联；永久删会硬删子树并清理 trash。
 - AC-029：设置持久化 —— P1-1 后应同时断言界面生效，而不只是存盘。
+- P3 增强仍需满足 PRD §5：业务模块是唯一数据源；今日计划只存执行安排与关联；首页只展示需关注信息。
+- 四象限只做今日计划归类与执行提示，不另建业务数据源。
 
 ---
 
@@ -84,3 +166,23 @@ P0 本机安全与删除语义
 | 2026-10-31 | P2-2 | 新增从模板开始训练的单接口，替换前端连环 create |
 | 2026-10-31 | P2-4 | 抽出 `shared/schema.ts` 统一 CollectionName 与设置枚举 |
 | 2026-10-31 | P2-5 | 明确延期：签名安装包非本机 MVP 范围 |
+| 2026-10-31 | P3 计划 | 写入产品增强清单 P3-1～P3-20，按当天闭环 → 少跳页 → 模块加深 → 观感工程分批 |
+| 2026-10-31 | P3-1～P3-4 | 命令面板、快速新增含娱乐、统一加入今日、首页可执行 |
+| 2026-10-31 | P3-5 | 咨询/开发：编辑进右侧详情侧栏，新建保留 Modal；补 ErrorState 导入 |
+| 2026-10-31 | P3-6 | 完成关联计划时询问是否回写来源状态（交付/跟进/工作项/内容/娱乐） |
+| 2026-10-31 | P3-7 | 首页复盘轻提示；今日计划支持 `?review=1` 聚焦 |
+| 2026-10-31 | P3-8 | 自媒体本周发布排期；空数据时隐藏看板与空图表 |
+| 2026-10-31 | P3-9 | 首页本周回顾四格摘要 |
+| 2026-10-31 | P3-10 | 设置页选择性导入 ZIP/CSV；同 id 跳过并先做安全备份 |
+| 2026-10-31 | P3-11 | 首页备忘箱：回顾已转换备忘，可恢复或再次转出 |
+| 2026-10-31 | P3-12 | 咨询久未沟通天数可配置；关注列表展示原因 |
+| 2026-10-31 | P3-13 | 饮食营养条显示相对目标差额 |
+| 2026-10-31 | P3-14 | 娱乐下次目标进入首页关注（软提醒） |
+| 2026-10-31 | P3-15 | 空状态推荐下一步；完成/延期/转换成功 toast |
+| 2026-10-31 | P3-16 | 高频业务集合 Zod 校验扩展 |
+| 2026-10-31 | P3-17 | Media / Development / Today 拆出列表与区块子组件 |
+| 2026-10-31 | P3-18 | 计划回写 / 加入今日 / 命令面板领域单测补齐 |
+| 2026-10-31 | P3-19 | spacing 语义 token；设置页与偏好区密度收紧 |
+| 2026-10-31 | P3-20 | 窄窗顶栏：搜索/新建/保存收纳为图标，手动保存仍可达 |
+| 2026-10-31 | 首页四象限 | `matrix_quadrant` 字段 + 首页轻重缓急；按 priority 推断；十字箭头轴与四格外边对齐；修空提示/竖排乱码 |
+| 2026-10-31 | P3 收尾 | P3-1～P3-20 全部完成；文档进度改为进入日常打磨 / 可选 P4 |
