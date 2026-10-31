@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import { X, WarningCircle, SpinnerGap } from "@phosphor-icons/react";
 import { classNames } from "../utils";
@@ -104,7 +105,8 @@ export function Modal({ title, description, open, onClose, children, wide = fals
     };
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // 挂到 body：主区 overflow 裁剪后，fixed 弹层仍会盖住整窗，不被顶栏遮挡。
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={modalRef} className={classNames("modal", "glass-regular", wide && "modal-wide")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined}>
         <header className="modal-header">
@@ -113,7 +115,8 @@ export function Modal({ title, description, open, onClose, children, wide = fals
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
