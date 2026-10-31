@@ -1,16 +1,16 @@
 # 测试分层说明
 
-木子工作台的自动化检查按速度与职责分层。总入口仍是 `npm run test:all`；日常开发优先跑更靠近改动的那一层。
+木子工作台的自动化检查按速度与职责分层。总入口仍是 `pnpm run test:all`；日常开发优先跑更靠近改动的那一层。
 
 ## 金字塔
 
 | 层级 | 命令 | 职责 | 典型目录 |
 | --- | --- | --- | --- |
-| 单元 | `npm run test:unit` | 纯函数、领域规则、校验与 store/dashboard | `tests/unit/` |
-| 组件 | `npm test` 中的 `tests/components` | 壳层、通用 UI、外观切换 | `tests/components/` |
-| 集成 | `npm run test:integration` | Fastify + SQLite 真实读写、备份/恢复 | `tests/integration/` |
-| 生产冒烟 | `npm run test:production` / `test:artifact` | 构建产物、本机启动器、静态资源 | `tests/*.mjs` |
-| 端到端 | `npm run test:e2e` | 真实 Chromium 验收；按描述分为外观与业务两组 | `tests/e2e/` |
+| 单元 | `pnpm run test:unit` | 纯函数、领域规则、校验与 store/dashboard | `tests/unit/` |
+| 组件 | `pnpm test` 中的 `tests/components` | 壳层、通用 UI、外观切换 | `tests/components/` |
+| 集成 | `pnpm run test:integration` | Fastify + SQLite 真实读写、备份/恢复 | `tests/integration/` |
+| 生产冒烟 | `pnpm run test:production` / `test:artifact` | 构建产物、本机启动器、静态资源 | `tests/*.mjs` |
+| 端到端 | `pnpm run test:e2e` | 真实 Chromium 验收；按描述分为外观与业务两组 | `tests/e2e/` |
 
 ## 约定
 

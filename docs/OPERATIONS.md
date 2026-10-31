@@ -9,10 +9,10 @@ macOS 双击根目录的 `启动木子工作台.command`，Windows 双击 `启�
 终端等价命令：
 
 ```bash
-npm run app:start
+pnpm run app:start
 ```
 
-如果开发源代码有变化，先运行 `npm run build`，再重新启动生产服务。
+如果开发源代码有变化，先运行 `pnpm run build`，再重新启动生产服务。
 
 ## 2. 文件位置
 
@@ -57,7 +57,7 @@ macOS 默认根目录为 `~/Library/Application Support/MuziWorkspace`，Windows
 
 先运行 `npm run app:start`，查看终端信息。若失败，macOS 检查 `~/Library/Application Support/MuziWorkspace/logs/app.log`，Windows 检查 `%LOCALAPPDATA%\MuziWorkspace\logs\app.log`。默认端口是 4317；开发页面端口是 3000。
 
-如果系统提示找不到 `node` 或 `npm`，请安装 Node.js 22.13.0 或更高版本并重新打开终端。第一次从源代码运行还需要在项目目录执行一次 `npm install`。
+如果系统提示找不到 `node` 或 `pnpm`，请安装 Node.js 22.13.0 或更高版本，并用 `corepack enable`（或自行安装）启用 pnpm 后重新打开终端。第一次从源代码运行还需要在项目目录执行一次 `pnpm install`。
 
 ### 显示数据文件只读或保存失败
 

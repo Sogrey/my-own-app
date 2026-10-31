@@ -78,8 +78,10 @@ cd my-own-app
 在项目目录运行：
 
 ```bash
-npm install
+pnpm install
 ```
+
+推荐使用 pnpm（仓库已锁定 `packageManager`）。若暂未安装 pnpm，也可用 `npm install`，但请勿提交 `package-lock.json`。
 
 只有安装依赖时需要联网。安装完成后，木子工作台的日常运行、保存、备份和恢复都不需要联网。
 
@@ -116,7 +118,7 @@ chmod +x "启动木子工作台.command"
 也可以在终端中运行：
 
 ```bash
-npm run app:start
+pnpm run app:start
 ```
 
 ## 保存与退出
@@ -162,7 +164,7 @@ MuziWorkspace/
 安装依赖后运行：
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 开发页面位于 `http://127.0.0.1:3000`，本地接口默认位于 `http://127.0.0.1:4317`。
@@ -170,13 +172,13 @@ npm run dev
 常用命令：
 
 ```bash
-npm run lint          # 代码规范检查
-npm run typecheck     # 前端与服务端类型检查
-npm test              # 单元、组件和集成测试
-npm run build         # 生成生产构建
-npm start             # 前台运行已经生成的生产构建
-npm run test:e2e      # 运行真实浏览器端到端验收
-npm run test:all      # 运行全部检查与测试
+pnpm run lint          # 代码规范检查
+pnpm run typecheck     # 前端与服务端类型检查
+pnpm test              # 单元、组件和集成测试
+pnpm run build         # 生成生产构建
+pnpm start             # 前台运行已经生成的生产构建
+pnpm run test:e2e      # 运行真实浏览器端到端验收
+pnpm run test:all      # 运行全部检查与测试
 ```
 
 ## 技术结构

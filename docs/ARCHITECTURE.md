@@ -141,8 +141,8 @@ quick_memos ──convert──► 今日事项或各业务集合
 
 | 模式 | 前端 | API | 数据 |
 | --- | --- | --- | --- |
-| `npm run dev` | Vite `:3000`，proxy `/api` | `tsx watch server` `:4317` | 本机数据目录（可用 `MUZI_DATA_DIR` 覆盖） |
-| `npm run app:start` / 启动器 | Fastify 托管 `dist/` | 同一进程 `:4317` | 系统默认 `MuziWorkspace` |
+| `pnpm run dev` | Vite `:3000`，proxy `/api` | `tsx watch server` `:4317` | 本机数据目录（可用 `MUZI_DATA_DIR` 覆盖） |
+| `pnpm run app:start` / 启动器 | Fastify 托管 `dist/` | 同一进程 `:4317` | 系统默认 `MuziWorkspace` |
 
 启动器额外保证：
 

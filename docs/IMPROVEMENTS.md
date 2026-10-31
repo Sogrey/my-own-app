@@ -38,7 +38,7 @@ P0 本机安全与删除语义
 | P1-3 | 每次写操作全量 `/api/state` | 已完成 | `api.ts`、`workspaceState.ts`、`WorkspaceContext` | 写接口 emit mutation，本地 patch；仅刷新 dashboard 等派生查询 |
 | P1-4 | 页面巨型 JSX + `props: any` | 已完成（起步） | `pages/*/Dialog.tsx`、`pageTypes.ts`、`moduleRoutes` | 拆出健身/饮食/咨询 Dialog 与健身 helpers；共享来源标签；Dialog 类型收紧 |
 | P1-5 | 测试偏重 E2E、领域单测不足 | 已完成（起步） | `tests/unit`、`docs/TESTING.md`、e2e describe | 补 store/dashboard 单测；E2E 分外观/业务组；补充测试分层文档 |
-| P1-6 | 同时存在 npm / pnpm 锁文件 | 已完成 | 仓库根 | 保留 npm（`package-lock.json`），移除 pnpm 锁与 workspace 文件 |
+| P1-6 | 同时存在 npm / pnpm 锁文件 | 已完成 | 仓库根 | 以 pnpm 为主（`pnpm-lock.yaml` + `packageManager`）；忽略 `package-lock.json` |
 | P1-7 | 软删无 Undo；延期仅「明天」；备忘转换过窄 | 已完成 | WorkspaceContext、TodayPage、DashboardPage | 软删底部 Undo；延期可选日期；备忘可转客户/娱乐/训练模板/食材 |
 
 ---
@@ -77,7 +77,7 @@ P0 本机安全与删除语义
 | 2026-10-31 | P1-3 | 写操作增量 patch workspace，不再每次全量拉 `/api/state` |
 | 2026-10-31 | P1-4 | 拆出 Fitness/Diet/Consulting Dialog 与共享 pageTypes、来源标签 |
 | 2026-10-31 | P1-5 | 新增 store/dashboard 单测、TESTING.md；E2E 按外观/业务分组 |
-| 2026-10-31 | P1-6 | 删除 pnpm-lock.yaml / pnpm-workspace.yaml，统一 npm |
+| 2026-10-31 | P1-6 | 统一包管理器：以 pnpm 为主，保留脚本兼容 npm run |
 | 2026-10-31 | P2-3 | 搜索关键字按字面匹配，转义 LIKE 通配符 |
 | 2026-10-31 | P1-7 | 软删 Undo toast；今日计划延期到指定日期；快速备忘转换扩展 |
 | 2026-10-31 | P2-1 | 工作区加载失败时壳层展示错误与重试，不再假装空数据 |
