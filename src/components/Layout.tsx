@@ -3,12 +3,13 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   MagnifyingGlass, Plus, FloppyDisk, CheckCircle, WarningCircle, SidebarSimple,
-  ArrowRight, Command, Power,
+  ArrowRight, Command,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import { formatDateTime, classNames } from "../utils";
 import { normalizeAppearance } from "../appearance";
+import { collectionFocusPath } from "../moduleRoutes";
 import { Button, IconButton, Modal, Skeleton, ErrorState, Badge } from "./ui";
 import { AmbientEnvironment, chooseAmbientScene } from "./AmbientEnvironment";
 import { ModuleArtwork, type ModuleArtworkName } from "./ModuleArtwork";
@@ -32,15 +33,6 @@ const groups = [
   { label: "系统", links: [{ to: "/settings", label: "数据与设置", module: "settings", tone: "graphite" }] },
 ] satisfies Array<{ label: string; links: Array<{ to: string; label: string; module: ModuleArtworkName; tone: string }> }>;
 
-const collectionRoutes: Record<string, string> = {
-  planItems: "/today", mediaContents: "/media", devProjects: "/development", devMilestones: "/development",
-  devWorkItems: "/development", devLogs: "/development", clients: "/consulting", consultingProjects: "/consulting",
-  consultingInteractions: "/consulting", consultingDeliverables: "/consulting", consultingFollowups: "/consulting",
-  consultingTimeEntries: "/consulting", workoutTemplates: "/fitness", workouts: "/fitness", bodyMetrics: "/fitness",
-  nutritionTargets: "/diet", foods: "/diet", meals: "/diet", mealItems: "/diet", entertainmentItems: "/entertainment",
-  playSessions: "/entertainment", quickMemos: "/",
-};
-
 const routeMeta: Record<string, { label: string; module: ModuleArtworkName; tone: string; index: string }> = {
   "/": { label: "首页总览", module: "dashboard", tone: "sky", index: "00" },
   "/today": { label: "今日计划", module: "today", tone: "cyan", index: "01" },
@@ -54,13 +46,12 @@ const routeMeta: Record<string, { label: string; module: ModuleArtworkName; tone
 };
 
 export function AppLayout() {
-  const { data, saveNow, saveStatus } = useWorkspace();
+  const { data, saveNow, saveStatus, loading, error, refresh } = useWorkspace();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
-  const [exitState, setExitState] = useState<"idle" | "saving" | "done" | "error">("idle");
-  const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus, staleTime: 30_000 });
+  const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus, staleTime: 30_000, enabled: !error });
   const currentPage = routeMeta[location.pathname] ?? routeMeta["/"];
   const appearance = normalizeAppearance(data.settings.appearance);
   const theme = data.settings.theme === "dark" ? "dark" : "light";
@@ -119,19 +110,6 @@ export function AppLayout() {
     };
   }, [appearance]);
 
-  const saveAndExit = async () => {
-    if (exitState === "saving" || exitState === "done") return;
-    setExitState("saving");
-    try {
-      await saveNow();
-      await api.saveAndExit();
-      setExitState("done");
-      document.title = "木子工作台已安全退出";
-    } catch {
-      setExitState("error");
-    }
-  };
-
   return (
     <div
       className={classNames("app-shell", appearance === "neo" && "neo-shell", collapsed && "sidebar-collapsed")}
@@ -172,15 +150,17 @@ export function AppLayout() {
             <button className="search-trigger glass-clear" aria-label="搜索所有内容" title="搜索所有内容" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={18} /><span>搜索所有内容</span><kbd><Command size={12} />K</kbd></button>
             <Button className="topbar-create" variant="secondary" size="sm" onClick={() => setQuickOpen(true)}><Plus size={16} />快速新建</Button>
             <Button className="manual-save" variant="secondary" size="sm" loading={saveStatus === "saving"} onClick={() => void saveNow().catch(() => undefined)}><FloppyDisk size={16} />手动保存</Button>
-            <Button className="save-exit" variant="ghost" size="sm" loading={exitState === "saving"} disabled={exitState === "done"} onClick={() => void saveAndExit()}><Power size={16} />{exitState === "error" ? "退出失败，重试" : "保存并退出"}</Button>
             <SaveIndicator status={saveStatus} />
           </div>
         </header>
-        <main className="page-container" id="main-content" tabIndex={-1}><Outlet /></main>
+        <main className="page-container" id="main-content" tabIndex={-1}>
+          {loading ? <Skeleton lines={8} /> : error ? (
+            <ErrorState message={error} onRetry={() => void refresh().catch(() => undefined)} />
+          ) : <Outlet />}
+        </main>
       </div>
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <QuickCreateModal open={quickOpen} onClose={() => setQuickOpen(false)} />
-      {exitState === "done" ? <ExitScreen /> : null}
+      {!error ? <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} /> : null}
+      {!error ? <QuickCreateModal open={quickOpen} onClose={() => setQuickOpen(false)} /> : null}
     </div>
   );
 }
@@ -191,10 +171,6 @@ function NeoModuleEmblem({ module }: { module: ModuleArtworkName }) {
 
 function NotebookEnvironment() {
   return <div className="notebook-environment" aria-hidden="true" />;
-}
-
-function ExitScreen() {
-  return <div className="exit-screen" role="status"><div className="exit-card"><CheckCircle size={32} weight="fill" /><strong>数据已保存，木子工作台已安全退出</strong><p>现在可以关闭这个页面。下次双击启动图标，会重新启动并打开工作台。</p></div></div>;
 }
 
 function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" | "error" }) {
@@ -226,7 +202,7 @@ function SearchModal({ open, onClose }: { open: boolean; onClose: () => void }) 
       <div className="search-results">
         {!query ? <div className="search-hint">输入内容开始搜索，按 Esc 关闭。</div> : search.isLoading ? <Skeleton lines={4} /> : search.error ? <ErrorState message={(search.error as Error).message} /> : search.data?.length === 0 ? <div className="search-hint">没有找到匹配内容。</div> : Object.entries(grouped).map(([module, items]) => (
           <section className="search-group" key={module}><h3>{moduleNames[module] ?? module}</h3>{items.map((item) => (
-            <button key={`${item.collection}-${item.id}`} onClick={() => { navigate(collectionRoutes[item.collection] ?? "/"); onClose(); }}><span>{item.title || "未命名记录"}</span><ArrowRight size={16} /></button>
+            <button key={`${item.collection}-${item.id}`} onClick={() => { navigate(collectionFocusPath(String(item.collection), String(item.id))); onClose(); }}><span>{item.title || "未命名记录"}</span><ArrowRight size={16} /></button>
           ))}</section>
         ))}
       </div>
