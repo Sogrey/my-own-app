@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { browserOpenCommandFor, defaultDataRootFor, npmCommandFor } from "../scripts/platform.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const localWriteHeaders = { Origin: "http://127.0.0.1", "Content-Type": "application/json" };
 
 test("production server serves the built app and API on loopback", async (context) => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "muzi-production-"));
@@ -77,11 +78,11 @@ test("desktop launcher reuses one server and the page exit endpoint saves before
 
     const saved = await fetch(`http://127.0.0.1:${port}/api/settings`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: localWriteHeaders,
       body: JSON.stringify({ launcherPersistence: "保存并退出后仍存在" }),
     });
     assert.equal(saved.ok, true);
-    const exit = await fetch(`http://127.0.0.1:${port}/api/system/save-and-exit`, { method: "POST" }).then((response) => response.json());
+    const exit = await fetch(`http://127.0.0.1:${port}/api/system/save-and-exit`, { method: "POST", headers: localWriteHeaders }).then((response) => response.json());
     assert.equal(exit.data.database, "ok");
     assert.equal(exit.data.exiting, true);
     await waitForStopped(`http://127.0.0.1:${port}`);
@@ -108,7 +109,7 @@ test("desktop launcher reuses one server and the page exit endpoint saves before
     await waitForHealth(`http://127.0.0.1:${port}`, { exitCode: null }, () => afterSystemShutdown.stdout);
     const settingsAfterShutdown = await fetch(`http://127.0.0.1:${port}/api/settings`).then((response) => response.json());
     assert.equal(settingsAfterShutdown.data.launcherPersistence, "保存并退出后仍存在");
-    await fetch(`http://127.0.0.1:${port}/api/system/save-and-exit`, { method: "POST" });
+    await fetch(`http://127.0.0.1:${port}/api/system/save-and-exit`, { method: "POST", headers: localWriteHeaders });
     await waitForStopped(`http://127.0.0.1:${port}`);
   } finally {
     const pidFile = path.join(dataRoot, "muzi-workspace.pid");
@@ -170,7 +171,7 @@ test("desktop launcher replaces a stale build before opening the page", async ()
     assert.equal(script.ok, true);
     assert.match(script.headers.get("content-type") ?? "", /javascript/);
   } finally {
-    try { await fetch(`${baseUrl}/api/system/save-and-exit`, { method: "POST" }); } catch { /* Already stopped. */ }
+    try { await fetch(`${baseUrl}/api/system/save-and-exit`, { method: "POST", headers: localWriteHeaders }); } catch { /* Already stopped. */ }
     await waitForStopped(baseUrl).catch(() => {});
     if (stale.exitCode === null) stale.kill("SIGTERM");
     if (fs.existsSync(pidFile)) {

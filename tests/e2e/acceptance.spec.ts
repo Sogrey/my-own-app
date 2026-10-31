@@ -1,13 +1,9 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { create } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
-async function create(request: APIRequestContext, collection: string, payload: Record<string, any>) {
-  const response = await request.post(`/api/collections/${collection}`, { data: payload });
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()).data;
-}
-
+test.describe("外观与壳层", () => {
 test("opens locally, uses no external runtime resources, and reaches all nine pages", async ({ page }) => {
   const externalRequests: string[] = [];
   page.on("request", (request) => {
@@ -265,9 +261,12 @@ test("keeps every module's primary business entry and safe-exit control availabl
       await page.goto(path);
       await expect(page.locator("html")).toHaveAttribute("data-appearance", appearance);
       await expect(page.getByRole("button", { name: action, exact: true }).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: "保存并退出", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "手动保存", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "保存并退出" })).toHaveCount(0);
     }
   }
+  await page.goto("/settings");
+  await expect(page.getByRole("button", { name: "关闭本地服务", exact: true })).toBeVisible();
   await request.put("/api/settings", { data: { appearance: "liquid", theme: "light" } });
 });
 
@@ -364,6 +363,9 @@ test("keeps row menus above completed rows and opaque enough to read", async ({ 
   }
 });
 
+});
+
+test.describe("业务验收", () => {
 test("creates, schedules, displays and completes a daily plan item", async ({ page }) => {
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
   await page.goto("/today");
@@ -564,4 +566,5 @@ test("restores trash, persists appearance and theme, creates backup and download
   await page.getByRole("button", { name: "导出 ZIP" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/muzi-export-.*\.zip/);
+});
 });

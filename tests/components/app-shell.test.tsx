@@ -109,15 +109,11 @@ describe("application shell", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("已保存");
   });
 
-  it("saves pending data before requesting a safe service exit", async () => {
-    const fetchMock = mockApi();
+  it("keeps save in the topbar and does not offer exit there", async () => {
+    mockApi();
     renderApp();
-    await userEvent.click(await screen.findByRole("button", { name: "保存并退出" }));
-    expect(await screen.findByText("数据已保存，木子工作台已安全退出")).toBeInTheDocument();
-    const calls = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(calls).toContain("/api/system/save");
-    expect(calls).toContain("/api/system/save-and-exit");
-    expect(calls.indexOf("/api/system/save")).toBeLessThan(calls.indexOf("/api/system/save-and-exit"));
+    expect(await screen.findByRole("button", { name: "手动保存" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存并退出" })).not.toBeInTheDocument();
   });
 
   it("surfaces automatic backup failure in the application shell", async () => {
@@ -125,5 +121,24 @@ describe("application shell", () => {
     renderApp();
     expect(await screen.findByText("自动备份失败")).toBeInTheDocument();
     expect(screen.getByText("备份目录不可写")).toBeInTheDocument();
+  });
+
+  it("shows a workspace load error instead of empty business pages", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/state")) {
+        return { ok: false, status: 500, json: async () => ({ error: { message: "工作区数据无法读取" } }) } as Response;
+      }
+      if (url.startsWith("/api/system/status")) {
+        return { ok: true, status: 200, json: async () => ({ data: { latestBackup: null, backupStatus: null } }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ data: null }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderApp();
+    expect(await screen.findByText("暂时无法完成操作")).toBeInTheDocument();
+    expect(screen.getByText("工作区数据无法读取")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /从重点开始/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 });

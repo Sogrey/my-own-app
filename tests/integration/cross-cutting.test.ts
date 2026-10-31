@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../server/app.js";
-import { makeTestDirectory, removeTestDirectory } from "../helpers.js";
+import { localWriteHeaders, makeTestDirectory, removeTestDirectory } from "../helpers.js";
 
 let directory = "";
 let app: FastifyInstance;
@@ -10,7 +10,7 @@ beforeEach(async () => { directory = makeTestDirectory("cross-cutting"); app = a
 afterEach(async () => { if (app) await app.close(); removeTestDirectory(directory); });
 
 async function create(collection: string, payload: Record<string, any>) {
-  const response = await app.inject({ method: "POST", url: `/api/collections/${collection}`, payload });
+  const response = await app.inject({ method: "POST", headers: localWriteHeaders(), url: `/api/collections/${collection}`, payload });
   expect(response.statusCode).toBe(201);
   return response.json().data;
 }
@@ -33,25 +33,25 @@ describe("search, trash and settings", () => {
 
   it("moves a record to trash, restores it, and requires a separate permanent-delete operation", async () => {
     const content = await create("mediaContents", { title: "可恢复内容", stage: "idea" });
-    const removed = await app.inject({ method: "DELETE", url: `/api/collections/mediaContents/${content.id}` });
+    const removed = await app.inject({ method: "DELETE", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}` });
     expect(removed.statusCode).toBe(200);
     let state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.mediaContents).toHaveLength(0);
     expect(state.trash[0]).toMatchObject({ collection: "mediaContents", entity_id: content.id, display_title: "可恢复内容" });
-    const restored = await app.inject({ method: "POST", url: `/api/collections/mediaContents/${content.id}/restore` });
+    const restored = await app.inject({ method: "POST", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}/restore` });
     expect(restored.statusCode).toBe(200);
     state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.mediaContents[0].title).toBe("可恢复内容");
     expect(state.trash).toHaveLength(0);
-    await app.inject({ method: "DELETE", url: `/api/collections/mediaContents/${content.id}` });
-    const permanent = await app.inject({ method: "DELETE", url: `/api/collections/mediaContents/${content.id}/permanent` });
+    await app.inject({ method: "DELETE", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}` });
+    const permanent = await app.inject({ method: "DELETE", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}/permanent` });
     expect(permanent.statusCode).toBe(204);
     const includeDeleted = await app.inject({ method: "GET", url: "/api/collections/mediaContents?includeDeleted=true" });
     expect(includeDeleted.json().data).toHaveLength(0);
   });
 
   it("persists theme, appearance and calendar preferences across a restart", async () => {
-    const saved = await app.inject({ method: "PUT", url: "/api/settings", payload: { theme: "dark", appearance: "neo", weekStart: "sunday", dateFormat: "iso", dashboardModules: ["media", "fitness"] } });
+    const saved = await app.inject({ method: "PUT", headers: localWriteHeaders(), url: "/api/settings", payload: { theme: "dark", appearance: "neo", weekStart: "sunday", dateFormat: "iso", dashboardModules: ["media", "fitness"] } });
     expect(saved.json().data).toMatchObject({ theme: "dark", appearance: "neo", weekStart: "sunday", dateFormat: "iso" });
     await app.close();
     app = await buildApp({ dataDir: directory, autoBackup: false });
@@ -59,13 +59,20 @@ describe("search, trash and settings", () => {
     expect(loaded.json().data).toMatchObject({ theme: "dark", appearance: "neo", weekStart: "sunday", dateFormat: "iso", dashboardModules: ["media", "fitness"] });
   });
 
-  it("cascades child records when a deleted aggregate is permanently removed", async () => {
+  it("keeps child records after soft-deleting a parent, then clears the subtree on permanent delete", async () => {
     const project = await create("devProjects", { name: "待永久删除项目" });
-    await create("devWorkItems", { project_id: project.id, title: "子工作项", item_type: "feature", status: "todo" });
-    await app.inject({ method: "DELETE", url: `/api/collections/devProjects/${project.id}` });
-    await app.inject({ method: "DELETE", url: `/api/collections/devProjects/${project.id}/permanent` });
-    const state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
+    const workItem = await create("devWorkItems", { project_id: project.id, title: "子工作项", item_type: "feature", status: "todo" });
+    await app.inject({ method: "DELETE", headers: localWriteHeaders(), url: `/api/collections/devProjects/${project.id}` });
+
+    let state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
+    expect(state.devProjects).toHaveLength(0);
+    expect(state.devWorkItems).toEqual([expect.objectContaining({ id: workItem.id, title: "子工作项" })]);
+    expect(state.trash).toEqual([expect.objectContaining({ collection: "devProjects", entity_id: project.id })]);
+
+    await app.inject({ method: "DELETE", headers: localWriteHeaders(), url: `/api/collections/devProjects/${project.id}/permanent` });
+    state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.devProjects).toHaveLength(0);
     expect(state.devWorkItems).toHaveLength(0);
+    expect(state.trash).toHaveLength(0);
   });
 });

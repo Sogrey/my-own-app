@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../server/app.js";
-import { makeTestDirectory, removeTestDirectory } from "../helpers.js";
+import { localWriteHeaders, makeTestDirectory, removeTestDirectory } from "../helpers.js";
 
 let directory = "";
 let app: FastifyInstance;
@@ -10,7 +10,7 @@ beforeEach(async () => { directory = makeTestDirectory("life-modules"); app = aw
 afterEach(async () => { await app.close(); removeTestDirectory(directory); });
 
 async function create(collection: string, payload: Record<string, any>) {
-  const response = await app.inject({ method: "POST", url: `/api/collections/${collection}`, payload });
+  const response = await app.inject({ method: "POST", headers: localWriteHeaders(), url: `/api/collections/${collection}`, payload });
   expect(response.statusCode).toBe(201);
   return response.json().data;
 }
@@ -23,13 +23,40 @@ describe("specialized life modules", () => {
     const exercise = await create("workoutExercises", { workout_id: workout.id, name: "卧推", sort_order: 0 });
     const set = await create("workoutSets", { workout_exercise_id: exercise.id, set_number: 1, reps: 8, weight: 52.5, completed: 1 });
     await create("bodyMetrics", { metric_date: "2026-08-02", weight: 72.4, waist: 81.2, notes: "晨起" });
-    await app.inject({ method: "PATCH", url: `/api/collections/workoutTemplateExercises/${templateExercise.id}`, payload: { target_weight: 55 } });
+    await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/workoutTemplateExercises/${templateExercise.id}`, payload: { target_weight: 55 } });
     const state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.workoutTemplateExercises[0].target_weight).toBe(55);
     expect(state.workoutSets.find((item: any) => item.id === set.id).weight).toBe(52.5);
     expect(state.bodyMetrics[0]).toMatchObject({ weight: 72.4, waist: 81.2 });
     expect(state.workoutTemplates[0].body_part).toBe("胸部与背部");
     expect(state.workouts[0].body_part).toBe("胸部与背部");
+  });
+
+  it("starts a workout from a template in one request and blocks a second active session", async () => {
+    const template = await create("workoutTemplates", { name: "下肢力量", body_part: "腿部", weekday: 4 });
+    await create("workoutTemplateExercises", { template_id: template.id, name: "深蹲", target_sets: 2, target_reps: 6, target_weight: 80, sort_order: 0 });
+    await create("workoutTemplateExercises", { template_id: template.id, name: "硬拉", target_sets: 1, target_reps: 5, target_weight: 100, sort_order: 1 });
+
+    const started = await app.inject({
+      method: "POST",
+      headers: localWriteHeaders(),
+      url: "/api/workouts/from-template",
+      payload: { template_id: template.id, workout_date: "2026-08-05" },
+    });
+    expect(started.statusCode).toBe(200);
+    const payload = started.json().data;
+    expect(payload.workout).toMatchObject({ name: "下肢力量", body_part: "腿部", workout_date: "2026-08-05", status: "in_progress", template_id: template.id });
+    expect(payload.exercises.map((item: any) => item.name)).toEqual(["深蹲", "硬拉"]);
+    expect(payload.sets).toHaveLength(3);
+
+    const blocked = await app.inject({
+      method: "POST",
+      headers: localWriteHeaders(),
+      url: "/api/workouts/from-template",
+      payload: { template_id: template.id, workout_date: "2026-08-06" },
+    });
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().error.message).toMatch(/进行中的训练/);
   });
 
   it("stores planned meals separately from actual intake and preserves unknown nutrition", async () => {
@@ -47,7 +74,7 @@ describe("specialized life modules", () => {
 
   it("tracks entertainment status and play sessions without overdue attention", async () => {
     const game = await create("entertainmentItems", { name: "星海旅人", platform: "Steam", activity_type: "game", status: "wishlist", next_goal: "完成序章" });
-    await app.inject({ method: "PATCH", url: `/api/collections/entertainmentItems/${game.id}`, payload: { status: "playing", progress: "第一章", rating: 8.5 } });
+    await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/entertainmentItems/${game.id}`, payload: { status: "playing", progress: "第一章", rating: 8.5 } });
     await create("playSessions", { entertainment_id: game.id, started_at: "2026-08-02T19:00:00.000Z", ended_at: "2026-08-02T20:37:00.000Z", duration_minutes: 97, progress_note: "到达新城市" });
     const state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.entertainmentItems[0]).toMatchObject({ status: "playing", progress: "第一章", rating: 8.5 });

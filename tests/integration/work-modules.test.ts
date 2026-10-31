@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../server/app.js";
-import { makeTestDirectory, removeTestDirectory } from "../helpers.js";
+import { localWriteHeaders, makeTestDirectory, removeTestDirectory } from "../helpers.js";
 
 let directory = "";
 let app: FastifyInstance;
@@ -10,7 +10,7 @@ beforeEach(async () => { directory = makeTestDirectory("work-modules"); app = aw
 afterEach(async () => { await app.close(); removeTestDirectory(directory); });
 
 async function create(collection: string, payload: Record<string, any>) {
-  const response = await app.inject({ method: "POST", url: `/api/collections/${collection}`, payload });
+  const response = await app.inject({ method: "POST", headers: localWriteHeaders(), url: `/api/collections/${collection}`, payload });
   expect(response.statusCode).toBe(201);
   return response.json().data;
 }
@@ -18,9 +18,9 @@ async function create(collection: string, payload: Record<string, any>) {
 describe("specialized work modules", () => {
   it("moves media content through production and stores publishing metrics", async () => {
     const content = await create("mediaContents", { title: "本地工作台介绍", platform: "B站", content_format: "视频", stage: "idea", copy_text: "首版脚本" });
-    const producing = await app.inject({ method: "PATCH", url: `/api/collections/mediaContents/${content.id}`, payload: { stage: "producing", planned_publish_at: "2026-08-08" } });
+    const producing = await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}`, payload: { stage: "producing", planned_publish_at: "2026-08-08" } });
     expect(producing.json().data).toMatchObject({ stage: "producing", planned_publish_at: "2026-08-08" });
-    const published = await app.inject({ method: "PATCH", url: `/api/collections/mediaContents/${content.id}`, payload: { stage: "published", published_at: "2026-08-09", publish_url: "https://example.test/video", views: 1387, likes: 94, comments: 17 } });
+    const published = await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/mediaContents/${content.id}`, payload: { stage: "published", published_at: "2026-08-09", publish_url: "https://example.test/video", views: 1387, likes: 94, comments: 17 } });
     expect(published.json().data).toMatchObject({ stage: "published", views: 1387, likes: 94, comments: 17 });
   });
 
@@ -29,7 +29,7 @@ describe("specialized work modules", () => {
     const milestone = await create("devMilestones", { project_id: project.id, name: "第一版", target_date: "2026-09-01", status: "open" });
     const bug = await create("devWorkItems", { project_id: project.id, milestone_id: milestone.id, title: "修复备份恢复边界", item_type: "bug", priority: "high", status: "todo", description: "损坏文件不得覆盖当前数据" });
     await create("devLogs", { project_id: project.id, log_date: "2026-08-02", content: "完成数据库迁移和备份切片。" });
-    const done = await app.inject({ method: "PATCH", url: `/api/collections/devWorkItems/${bug.id}`, payload: { status: "done" } });
+    const done = await app.inject({ method: "PATCH", headers: localWriteHeaders(), url: `/api/collections/devWorkItems/${bug.id}`, payload: { status: "done" } });
     expect(done.json().data).toMatchObject({ item_type: "bug", priority: "high", status: "done", milestone_id: milestone.id });
     const state = (await app.inject({ method: "GET", url: "/api/state" })).json().data;
     expect(state.devProjects).toHaveLength(1);

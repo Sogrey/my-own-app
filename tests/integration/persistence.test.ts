@@ -6,7 +6,7 @@ import { buildApp } from "../../server/app.js";
 import { getAppPaths } from "../../server/config.js";
 import { DatabaseManager } from "../../server/database.js";
 import { AppStore } from "../../server/store.js";
-import { makeTestDirectory, removeTestDirectory } from "../helpers.js";
+import { localWriteHeaders, makeTestDirectory, removeTestDirectory } from "../helpers.js";
 
 let directory = "";
 afterEach(() => { if (directory) removeTestDirectory(directory); directory = ""; });
@@ -15,7 +15,7 @@ describe("SQLite persistence and migrations", () => {
   it("persists a plan item across a complete server restart", async () => {
     directory = makeTestDirectory("persistence");
     const first = await buildApp({ dataDir: directory, autoBackup: false });
-    const created = await first.inject({ method: "POST", url: "/api/collections/planItems", payload: { title: "重启后仍然存在", plan_date: "2026-08-02", priority: "high" } });
+    const created = await first.inject({ method: "POST", headers: localWriteHeaders(), url: "/api/collections/planItems", payload: { title: "重启后仍然存在", plan_date: "2026-08-02", priority: "high" } });
     expect(created.statusCode).toBe(201);
     const id = created.json().data.id;
     await first.close();
@@ -34,15 +34,14 @@ describe("SQLite persistence and migrations", () => {
     directory = makeTestDirectory("manual-save");
     const first = await buildApp({ dataDir: directory, autoBackup: false });
     const dataFile = getAppPaths(directory).dataFile;
-    const created = await first.inject({
-      method: "POST",
+    const created = await first.inject({ method: "POST", headers: localWriteHeaders(),
       url: "/api/collections/planItems",
       payload: { title: "手动保存验证", plan_date: "2026-08-02" },
     });
     expect(created.statusCode).toBe(201);
     expect(fs.statSync(`${dataFile}-wal`).size).toBeGreaterThan(0);
 
-    const saved = await first.inject({ method: "POST", url: "/api/system/save" });
+    const saved = await first.inject({ method: "POST", headers: localWriteHeaders(), url: "/api/system/save" });
     expect(saved.statusCode).toBe(200);
     expect(saved.json().data).toMatchObject({ database: "ok", dataFile });
     expect(new Date(saved.json().data.savedAt).toISOString()).toBe(saved.json().data.savedAt);
