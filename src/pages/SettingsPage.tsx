@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Database, FolderOpen, ShieldCheck, DownloadSimple, ArrowCounterClockwise, Trash, Sun, Moon, Check, Archive, Notebook, Stack, SquaresFour } from "@phosphor-icons/react";
+import { Database, FolderOpen, ShieldCheck, DownloadSimple, ArrowCounterClockwise, Trash, Sun, Moon, Check, Archive, Notebook, Stack, SquaresFour, Power } from "@phosphor-icons/react";
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import type { CollectionName } from "../types";
 import { formatBytes, formatDateTime } from "../utils";
 import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, PageHeader, Section, Skeleton } from "../components/ui";
+import { ExitScreen } from "../components/ExitScreen";
 import { ModuleArtwork } from "../components/ModuleArtwork";
 import { normalizeAppearance } from "../appearance";
 
@@ -13,17 +14,32 @@ const collectionLabels: Record<string, string> = { planItems: "今日计划", qu
 const dashboardOptions = [{ value: "media", label: "自媒体" }, { value: "development", label: "开发工作" }, { value: "consulting", label: "咨询工作" }, { value: "fitness", label: "健身计划" }, { value: "diet", label: "饮食计划" }, { value: "entertainment", label: "游戏娱乐" }];
 
 export function SettingsPage() {
-  const { data, run } = useWorkspace();
+  const { data, run, saveNow } = useWorkspace();
   const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus });
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backups });
   const [busy, setBusy] = useState("");
   const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [shutdownOpen, setShutdownOpen] = useState(false);
+  const [exitState, setExitState] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [permanent, setPermanent] = useState<{ collection: CollectionName; id: string; title: string } | null>(null);
   const [dashboardModules, setDashboardModules] = useState<string[] | null>(null);
   const saveSetting = (key: string, value: any) => run(() => api.saveSettings({ [key]: value }));
   useEffect(() => { setDashboardModules(null); }, [data.settings.dashboardModules]);
   const createBackup = async () => { setBusy("backup"); try { await run(() => api.createBackup("手动备份", false)); } finally { setBusy(""); } };
   const exportAll = async () => { setBusy("export"); try { const result = await run(api.exportAll); window.location.href = result.downloadUrl; } finally { setBusy(""); } };
+  const shutdownService = async () => {
+    if (exitState === "saving" || exitState === "done") return;
+    setExitState("saving");
+    try {
+      await saveNow();
+      await api.saveAndExit();
+      setExitState("done");
+      document.title = "木子工作台已安全退出";
+    } catch {
+      setExitState("error");
+      throw new Error("关闭本地服务失败");
+    }
+  };
   if (system.isLoading || backups.isLoading) return <><PageHeader icon={<ModuleArtwork module="settings" />} eyebrow="系统" title="数据与设置" description="检查本地数据和备份状态" /><Skeleton lines={8} /></>;
   if (system.error || backups.error) return <ErrorState message={((system.error || backups.error) as Error).message} onRetry={() => { void system.refetch(); void backups.refetch(); }} />;
   const status = system.data!;
@@ -41,6 +57,21 @@ export function SettingsPage() {
       <PageHeader icon={<ModuleArtwork module="settings" />} eyebrow="本机数据控制" title="数据与设置" description="查看数据文件、创建备份、恢复历史版本并调整使用偏好。" />
       <Section title="数据文件" description="业务数据保存在浏览器之外的独立 SQLite 文件中" action={<Button variant="secondary" onClick={() => void api.openDataDirectory()}><FolderOpen size={16} />打开数据目录</Button>}>
         <div className="data-file-panel"><div className="file-icon"><Database size={27} /></div><div className="file-copy"><strong>app.sqlite</strong><code>{status.dataFile.path}</code><div><span>{formatBytes(status.dataFile.size)}</span><span>修改于 {formatDateTime(status.dataFile.modifiedAt)}</span><Badge tone={status.dataFile.writable ? "success" : "warning"}><Check size={12} />{status.dataFile.writable ? "可读写" : "只读"}</Badge></div></div></div>
+        <div className="shutdown-panel">
+          <div>
+            <strong>关闭本地服务</strong>
+            <p>会先完成当前保存，再停止后台服务。日常改设置不需要退出；只有要彻底关掉本机服务时再使用。</p>
+          </div>
+          <Button
+            variant="ghost"
+            loading={exitState === "saving"}
+            disabled={exitState === "done"}
+            onClick={() => setShutdownOpen(true)}
+          >
+            <Power size={16} />
+            {exitState === "error" ? "关闭失败，重试" : "关闭本地服务"}
+          </Button>
+        </div>
       </Section>
       <div className="settings-grid">
         <Section title="备份与恢复" description="每天自动备份一次，普通自动备份保留最近30份" action={<Button loading={busy === "backup"} onClick={() => void createBackup()}><ShieldCheck size={16} />立即备份</Button>}>
@@ -61,7 +92,17 @@ export function SettingsPage() {
         {data.trash.length ? <div className="trash-list">{data.trash.map((item) => <article key={item.id}><Trash size={18} /><div><strong>{item.display_title}</strong><small>{collectionLabels[item.collection] || item.collection} · 删除于 {formatDateTime(item.deleted_at)}</small></div><Button variant="ghost" size="sm" onClick={() => void run(() => api.restore(item.collection as CollectionName, item.entity_id))}><ArrowCounterClockwise size={15} />恢复</Button><Button variant="ghost" size="sm" className="danger-text" onClick={() => setPermanent({ collection: item.collection as CollectionName, id: item.entity_id, title: item.display_title })}>永久删除</Button></article>)}</div> : <p className="quiet-line">回收站是空的。</p>}
       </Section>
       <ConfirmDialog open={Boolean(restoreId)} title="恢复这份备份？" description={selectedBackup ? `${selectedBackup.label || selectedBackup.filename} · ${formatDateTime(selectedBackup.createdAt)} · ${formatBytes(selectedBackup.size)}。恢复前会先为当前数据创建安全备份。` : "恢复前会先为当前数据创建安全备份。"} confirmLabel="创建安全备份并恢复" onClose={() => setRestoreId(null)} onConfirm={async () => { if (!restoreId) return; setBusy("restore"); try { await api.restoreBackup(restoreId); window.location.reload(); } finally { setBusy(""); } }} />
-      <ConfirmDialog open={Boolean(permanent)} title="永久删除这条记录？" description={`“${permanent?.title ?? "记录"}”将无法从回收站恢复。`} confirmLabel="永久删除" danger onClose={() => setPermanent(null)} onConfirm={async () => { if (permanent) await run(() => api.permanentDelete(permanent.collection, permanent.id)); }} />
+      <ConfirmDialog open={Boolean(permanent)} title="永久删除这条记录？" description={`“${permanent?.title ?? "记录"}”将无法从回收站恢复。若它仍有关联的子记录，也会一并从数据库中删除。`} confirmLabel="永久删除" danger onClose={() => setPermanent(null)} onConfirm={async () => { if (permanent) await run(() => api.permanentDelete(permanent.collection, permanent.id)); }} />
+      <ConfirmDialog
+        open={shutdownOpen}
+        title="关闭本地服务？"
+        description="会先保存当前数据，再停止后台服务。关闭浏览器标签不会停服务；只有确认后才会真正退出。"
+        confirmLabel="保存并关闭服务"
+        danger
+        onClose={() => setShutdownOpen(false)}
+        onConfirm={async () => { await shutdownService(); }}
+      />
+      {exitState === "done" ? <ExitScreen /> : null}
     </div>
   );
 }
