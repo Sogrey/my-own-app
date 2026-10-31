@@ -40,6 +40,14 @@ export function MediaPage() {
   const [menu, setMenu] = useState<string | null>(null);
   const analytics = useMemo(() => buildMediaAnalytics(data.mediaContents), [data.mediaContents]);
   useEffect(() => { if (params.get("new") === "1") setEditing({ stage: "idea" }); }, [params]);
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const item = data.mediaContents.find((content) => content.id === focusId);
+    if (!item) return;
+    setEditing(item);
+    setParams({});
+  }, [data.mediaContents, params, setParams]);
   const close = () => { setEditing(null); setParams({}); };
   const move = async (id: string, stage: string) => {
     const input: Record<string, any> = { stage };

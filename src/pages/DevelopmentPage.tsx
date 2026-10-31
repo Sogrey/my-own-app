@@ -24,6 +24,37 @@ export function DevelopmentPage() {
   const [filter, setFilter] = useState("open");
   useEffect(() => { if (!projectId && data.devProjects[0]) setProjectId(data.devProjects[0].id); }, [data.devProjects, projectId]);
   useEffect(() => { const value = params.get("new"); if (value) setDialog({ type: value === "work-item" ? "work" : "project" }); }, [params]);
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const work = data.devWorkItems.find((item) => item.id === focusId);
+    if (work) {
+      setProjectId(work.project_id);
+      setFilter("all");
+      setDialog({ type: "work", item: work });
+      setParams({});
+      return;
+    }
+    const milestone = data.devMilestones.find((item) => item.id === focusId);
+    if (milestone) {
+      setProjectId(milestone.project_id);
+      setDialog({ type: "milestone", item: milestone });
+      setParams({});
+      return;
+    }
+    const project = data.devProjects.find((item) => item.id === focusId);
+    if (project) {
+      setProjectId(project.id);
+      setDialog({ type: "project", item: project });
+      setParams({});
+      return;
+    }
+    const log = data.devLogs.find((item) => item.id === focusId);
+    if (log) {
+      setProjectId(log.project_id);
+      setParams({});
+    }
+  }, [data.devLogs, data.devMilestones, data.devProjects, data.devWorkItems, params, setParams]);
   const close = () => { setDialog(null); setParams({}); };
   const project = data.devProjects.find((item) => item.id === projectId);
   const milestones = data.devMilestones.filter((item) => item.project_id === projectId);

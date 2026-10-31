@@ -15,6 +15,15 @@ export function EntertainmentPage() {
   const [filter, setFilter] = useState("playing");
   const [dialog, setDialog] = useState<{ type: string; item?: Record<string, any> } | null>(null);
   useEffect(() => { if (params.get("new")) setDialog({ type: "item" }); }, [params]);
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const item = data.entertainmentItems.find((value) => value.id === focusId);
+    if (!item) return;
+    setFilter("all");
+    setDialog({ type: "item", item });
+    setParams({});
+  }, [data.entertainmentItems, params, setParams]);
   const close = () => { setDialog(null); setParams({}); };
   const items = data.entertainmentItems.filter((item) => filter === "all" || item.status === filter);
   const activeSessions = data.playSessions.filter((item) => !item.ended_at);

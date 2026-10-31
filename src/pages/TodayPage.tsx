@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarPlus, Check, Clock, DotsThree, ArrowBendDownRight, Trash, Play, X, ArrowSquareOut } from "@phosphor-icons/react";
 import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
-import { addDays, classNames, formatDate, formatDuration, localDate } from "../utils";
+import { sourceFocusPath, sourceModuleLabels } from "../moduleRoutes";
+import { addDays, classNames, formatDate, formatDuration, localDate, normalizeDateFormat, normalizeWeekStart, weekRange } from "../utils";
 import { Badge, Button, EmptyState, EntityForm, Modal, PageHeader, Section, type FieldDefinition } from "../components/ui";
 import { ModuleArtwork } from "../components/ModuleArtwork";
 
@@ -24,6 +25,7 @@ export function TodayPage() {
   const [selectedDate, setSelectedDate] = useState(localDate());
   const [editing, setEditing] = useState<Record<string, any> | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  const [postpone, setPostpone] = useState<{ id: string; date: string } | null>(null);
   const [review, setReview] = useState("");
   const [savedReview, setSavedReview] = useState("");
   const newOpen = params.get("new") === "1";
@@ -38,6 +40,17 @@ export function TodayPage() {
     });
   }, [selectedDate]);
 
+  useEffect(() => {
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const item = data.planItems.find((plan) => plan.id === focusId);
+    if (!item) return;
+    setSelectedDate(item.plan_date || localDate());
+    setView("today");
+    setEditing(item);
+    setParams({});
+  }, [data.planItems, params, setParams]);
+
   const persistReview = useCallback(async () => {
     if (review === savedReview) return;
     await run(() => api.setReview(selectedDate, review));
@@ -46,14 +59,16 @@ export function TodayPage() {
 
   useEffect(() => registerSaveHandler(persistReview), [persistReview, registerSaveHandler]);
 
+  const dateFormat = normalizeDateFormat(data.settings.dateFormat);
+  const weekStart = normalizeWeekStart(data.settings.weekStart);
+  const currentWeek = useMemo(() => weekRange(selectedDate, weekStart), [selectedDate, weekStart]);
   const items = useMemo(() => {
     if (view === "today") return data.planItems.filter((item) => item.plan_date === selectedDate && item.status !== "cancelled");
     if (view === "week") {
-      const end = addDays(selectedDate, 6);
-      return data.planItems.filter((item) => item.plan_date >= selectedDate && item.plan_date <= end && item.status !== "cancelled");
+      return data.planItems.filter((item) => item.plan_date >= currentWeek.start && item.plan_date <= currentWeek.end && item.status !== "cancelled");
     }
     return data.planItems.filter((item) => item.plan_date < selectedDate || ["done", "cancelled"].includes(item.status));
-  }, [data.planItems, selectedDate, view]);
+  }, [currentWeek.end, currentWeek.start, data.planItems, selectedDate, view]);
   const ordered = [...items].sort((a, b) => `${a.plan_date}${a.start_time || "99:99"}`.localeCompare(`${b.plan_date}${b.start_time || "99:99"}`));
   const complete = items.filter((item) => item.status === "done").length;
 
@@ -66,22 +81,35 @@ export function TodayPage() {
         <div className="plan-stat"><span>完成</span><strong>{complete}/{items.length}</strong></div>
         <div className="plan-stat"><span>预计</span><strong>{formatDuration(items.reduce((sum, item) => sum + Number(item.estimated_minutes || 0), 0))}</strong></div>
       </div>
-      <Section title={view === "today" ? formatDate(selectedDate) : view === "week" ? "未来七天" : "历史记录"} description={view === "today" ? "按时间顺序处理；没有时间的事项排在最后。" : "按日期查看计划状态。"}>
+      <Section title={view === "today" ? formatDate(selectedDate, dateFormat) : view === "week" ? `${formatDate(currentWeek.start, dateFormat)} – ${formatDate(currentWeek.end, dateFormat)}` : "历史记录"} description={view === "today" ? "按时间顺序处理；没有时间的事项排在最后。" : view === "week" ? `按${weekStart === "sunday" ? "周日" : "周一"}开始的自然周查看。` : "按日期查看计划状态。"}>
         {ordered.length ? <div className="plan-table">{ordered.map((item) => <div className={classNames("plan-table-row", item.status === "done" && "is-done")} key={item.id}>
           <button className="complete-control" disabled={item.status === "done"} onClick={() => void run(() => api.completePlan(item.id))}>{item.status === "done" ? <Check size={14} /> : item.status === "doing" ? <Play size={12} /> : null}</button>
-          <div className="date-block"><strong>{item.start_time || "待安排"}</strong>{view !== "today" ? <small>{formatDate(item.plan_date)}</small> : null}</div>
-          <div className="plan-copy"><strong>{item.display_title || item.title}</strong><small>{item.notes || (item.source_module ? `来自 ${sourceLabels[item.source_module] ?? item.source_module}` : "独立事项")}</small>{item.source_module ? <button className="text-button source-link" onClick={() => navigate(sourceRoutes[item.source_module] ?? "/")}>打开来源 <ArrowSquareOut size={13} /></button> : null}</div>
+          <div className="date-block"><strong>{item.start_time || "待安排"}</strong>{view !== "today" ? <small>{formatDate(item.plan_date, dateFormat)}</small> : null}</div>
+          <div className="plan-copy"><strong>{item.display_title || item.title}</strong><small>{item.notes || (item.source_module ? `来自 ${sourceModuleLabels[item.source_module] ?? item.source_module}` : "独立事项")}</small>{item.source_module ? <button className="text-button source-link" onClick={() => navigate(sourceFocusPath(item.source_module, item.source_entity_id))}>打开来源 <ArrowSquareOut size={13} /></button> : null}</div>
           <Badge tone={item.priority === "high" ? "warning" : item.status === "done" ? "success" : "neutral"}>{item.status === "done" ? "已完成" : item.priority === "high" ? "高优先" : "待处理"}</Badge>
-          <div className="row-menu-wrap"><button className="icon-button" onClick={() => setMenu(menu === item.id ? null : item.id)}><DotsThree size={20} /></button>{menu === item.id ? <div className="row-menu"><button onClick={() => { openForm(item); setMenu(null); }}><Clock size={15} />调整时间</button><button onClick={() => void run(() => api.update("planItems", item.id, { status: "doing" }))}><Play size={15} />开始执行</button><button onClick={() => void run(() => api.postponePlan(item.id, addDays(item.plan_date, 1)))}><ArrowBendDownRight size={15} />移到明天</button><button onClick={() => void run(() => api.update("planItems", item.id, { status: "cancelled" }))}><X size={15} />取消</button><button className="danger" onClick={() => void run(() => api.remove("planItems", item.id))}><Trash size={15} />移到回收站</button></div> : null}</div>
+          <div className="row-menu-wrap"><button className="icon-button" onClick={() => setMenu(menu === item.id ? null : item.id)}><DotsThree size={20} /></button>{menu === item.id ? <div className="row-menu"><button onClick={() => { openForm(item); setMenu(null); }}><Clock size={15} />调整时间</button><button onClick={() => void run(() => api.update("planItems", item.id, { status: "doing" }))}><Play size={15} />开始执行</button><button onClick={() => { void run(() => api.postponePlan(item.id, addDays(item.plan_date, 1))); setMenu(null); }}><ArrowBendDownRight size={15} />移到明天</button><button onClick={() => { setPostpone({ id: item.id, date: addDays(item.plan_date, 1) }); setMenu(null); }}><CalendarPlus size={15} />延期到指定日期</button><button onClick={() => void run(() => api.update("planItems", item.id, { status: "cancelled" }))}><X size={15} />取消</button><button className="danger" onClick={() => void run(() => api.remove("planItems", item.id))}><Trash size={15} />移到回收站</button></div> : null}</div>
         </div>)}</div> : <EmptyState title="这个时间范围还没有计划" description="添加第一件需要执行的事情。" action={<Button variant="secondary" onClick={() => openForm()}>添加事项</Button>} />}
       </Section>
       {view === "today" ? <Section title="当日复盘" description="一句话记录今天做得如何"><textarea className="review-input" value={review} onChange={(event) => setReview(event.target.value)} onBlur={() => void persistReview().catch(() => undefined)} placeholder="今天最值得记住的进展、问题或调整……" /></Section> : null}
       <Modal open={newOpen || editing !== null} title={editing?.id ? "编辑计划事项" : "添加计划事项"} description="时间可以暂时留空，之后再安排。" onClose={closeForm}>
         <EntityForm fields={fields} initial={{ plan_date: selectedDate, priority: "medium", ...editing }} onCancel={closeForm} onSubmit={async (values) => { if (editing?.id) await run(() => api.update("planItems", editing.id, values)); else await run(() => api.create("planItems", values)); closeForm(); }} />
       </Modal>
+      <Modal open={Boolean(postpone)} title="延期到指定日期" description="事项会移到所选日期，并回到未开始状态。" onClose={() => setPostpone(null)}>
+        <form className="entity-form" onSubmit={(event) => {
+          event.preventDefault();
+          if (!postpone?.date) return;
+          void run(() => api.postponePlan(postpone.id, postpone.date)).then(() => setPostpone(null));
+        }}>
+          <label className="form-field">
+            <span>目标日期<em>必填</em></span>
+            <input type="date" autoFocus required value={postpone?.date ?? ""} onChange={(event) => setPostpone((current) => current ? { ...current, date: event.target.value } : current)} />
+          </label>
+          <footer className="modal-actions">
+            <Button type="button" variant="ghost" onClick={() => setPostpone(null)}>取消</Button>
+            <Button type="submit">确认延期</Button>
+          </footer>
+        </form>
+      </Modal>
     </div>
   );
 }
-
-const sourceRoutes: Record<string, string> = { media: "/media", development: "/development", consulting: "/consulting", fitness: "/fitness", diet: "/diet", entertainment: "/entertainment" };
-const sourceLabels: Record<string, string> = { media: "自媒体", development: "开发工作", consulting: "咨询工作", fitness: "健身计划", diet: "饮食计划", entertainment: "游戏娱乐" };
