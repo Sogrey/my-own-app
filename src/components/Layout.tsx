@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,11 +9,11 @@ import { api } from "../api";
 import { useWorkspace } from "../WorkspaceContext";
 import { formatDateTime, classNames } from "../utils";
 import { normalizeAppearance } from "../appearance";
-import { collectionFocusPath } from "../moduleRoutes";
-import { Button, IconButton, Modal, Skeleton, ErrorState, Badge } from "./ui";
+import { Badge, Button, ErrorState, IconButton, Modal, Skeleton } from "./ui";
 import { AmbientEnvironment, chooseAmbientScene } from "./AmbientEnvironment";
 import { ModuleArtwork, type ModuleArtworkName } from "./ModuleArtwork";
-import type { Entity } from "../types";
+import { CommandPalette } from "./CommandPalette";
+import { createCommands } from "../commandPalette";
 
 const groups = [
   { label: "日常", links: [
@@ -49,7 +49,7 @@ export function AppLayout() {
   const { data, saveNow, saveStatus, loading, error, refresh } = useWorkspace();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus, staleTime: 30_000, enabled: !error });
   const currentPage = routeMeta[location.pathname] ?? routeMeta["/"];
@@ -66,7 +66,7 @@ export function AppLayout() {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setSearchOpen(true);
+        setCommandOpen(true);
       }
     };
     document.addEventListener("keydown", handler);
@@ -147,9 +147,9 @@ export function AppLayout() {
             {appearance === "neo" ? <span className="topbar-index">{currentPage.index} / 08</span> : null}
           </div>
           <div className="topbar-actions">
-            <button className="search-trigger glass-clear" aria-label="搜索所有内容" title="搜索所有内容" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={18} /><span>搜索所有内容</span><kbd><Command size={12} />K</kbd></button>
-            <Button className="topbar-create" variant="secondary" size="sm" onClick={() => setQuickOpen(true)}><Plus size={16} />快速新建</Button>
-            <Button className="manual-save" variant="secondary" size="sm" loading={saveStatus === "saving"} onClick={() => void saveNow().catch(() => undefined)}><FloppyDisk size={16} />手动保存</Button>
+            <button className="search-trigger glass-clear" aria-label="搜索与命令" title="搜索与命令" onClick={() => setCommandOpen(true)}><MagnifyingGlass size={18} /><span>搜索与命令</span><kbd><Command size={12} />K</kbd></button>
+            <Button className="topbar-create" variant="secondary" size="sm" title="快速新建" aria-label="快速新建" onClick={() => setQuickOpen(true)}><Plus size={16} /><span className="label">快速新建</span></Button>
+            <Button className="manual-save" variant="secondary" size="sm" title="手动保存" aria-label="手动保存" loading={saveStatus === "saving"} onClick={() => void saveNow().catch(() => undefined)}><FloppyDisk size={16} /><span className="label">手动保存</span></Button>
             <SaveIndicator status={saveStatus} />
           </div>
         </header>
@@ -159,7 +159,7 @@ export function AppLayout() {
           ) : <Outlet />}
         </main>
       </div>
-      {!error ? <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} /> : null}
+      {!error ? <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} /> : null}
       {!error ? <QuickCreateModal open={quickOpen} onClose={() => setQuickOpen(false)} /> : null}
     </div>
   );
@@ -185,44 +185,45 @@ function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" | "erro
   return <div className={`save-indicator save-${status}`} role="status"><Icon size={16} /><span>{value.label}</span></div>;
 }
 
-function SearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [query, setQuery] = useState("");
-  const navigate = useNavigate();
-  const search = useQuery({ queryKey: ["search", query], queryFn: () => api.search(query), enabled: open && query.trim().length > 0 });
-  const grouped = useMemo(() => {
-    return (search.data ?? []).reduce<Record<string, Entity[]>>((result, item) => {
-      (result[item.module] ??= []).push(item);
-      return result;
-    }, {});
-  }, [search.data]);
-  const moduleNames: Record<string, string> = { dashboard: "首页", today: "今日计划", media: "自媒体", development: "开发工作", consulting: "咨询工作", fitness: "健身计划", diet: "饮食计划", entertainment: "游戏娱乐" };
-  return (
-    <Modal open={open} title="搜索工作台" description="按模块查找标题、笔记和记录内容" onClose={onClose} wide>
-      <div className="command-search glass-clear"><MagnifyingGlass size={20} /><input autoFocus aria-label="搜索关键词" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入关键词" /></div>
-      <div className="search-results">
-        {!query ? <div className="search-hint">输入内容开始搜索，按 Esc 关闭。</div> : search.isLoading ? <Skeleton lines={4} /> : search.error ? <ErrorState message={(search.error as Error).message} /> : search.data?.length === 0 ? <div className="search-hint">没有找到匹配内容。</div> : Object.entries(grouped).map(([module, items]) => (
-          <section className="search-group" key={module}><h3>{moduleNames[module] ?? module}</h3>{items.map((item) => (
-            <button key={`${item.collection}-${item.id}`} onClick={() => { navigate(collectionFocusPath(String(item.collection), String(item.id))); onClose(); }}><span>{item.title || "未命名记录"}</span><ArrowRight size={16} /></button>
-          ))}</section>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
 function QuickCreateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const options = [
-    { label: "今日事项", detail: "安排今天要执行的事情", route: "/today?new=1", tone: "cyan", module: "today" },
-    { label: "内容灵感", detail: "记录一个自媒体选题", route: "/media?new=1", tone: "coral", module: "media" },
-    { label: "开发工作项", detail: "添加功能、需求或 Bug", route: "/development?new=work-item", tone: "teal", module: "development" },
-    { label: "咨询跟进", detail: "安排客户后续联系", route: "/consulting?new=followup", tone: "amber", module: "consulting" },
-    { label: "训练记录", detail: "开始或安排一次训练", route: "/fitness?new=workout", tone: "sage", module: "fitness" },
-    { label: "餐食记录", detail: "记录计划或实际饮食", route: "/diet?new=meal", tone: "apricot", module: "diet" },
-  ];
+  const tones: Record<string, string> = {
+    "create-today": "cyan",
+    "create-media": "coral",
+    "create-dev": "teal",
+    "create-followup": "amber",
+    "create-workout": "sage",
+    "create-meal": "apricot",
+    "create-game": "indigo",
+  };
+  const modules: Record<string, ModuleArtworkName> = {
+    "create-today": "today",
+    "create-media": "media",
+    "create-dev": "development",
+    "create-followup": "consulting",
+    "create-workout": "fitness",
+    "create-meal": "diet",
+    "create-game": "entertainment",
+  };
   return (
     <Modal open={open} title="快速新增" description="选择要记录的内容类型" onClose={onClose}>
-      <div className="quick-grid">{options.map((option) => <button data-tone={option.tone} key={option.label} onClick={() => { navigate(option.route); onClose(); }}><span className="quick-option-icon"><ModuleArtwork module={option.module as ModuleArtworkName} /></span><div><Badge>{option.label}</Badge><p>{option.detail}</p></div><ArrowRight size={18} /></button>)}</div>
+      <div className="quick-grid">
+        {createCommands.map((option) => (
+          <button
+            data-tone={tones[option.id] ?? "cyan"}
+            key={option.id}
+            type="button"
+            onClick={() => {
+              if (option.href) navigate(option.href);
+              onClose();
+            }}
+          >
+            <span className="quick-option-icon"><ModuleArtwork module={modules[option.id] ?? "dashboard"} /></span>
+            <div><Badge>{option.label.replace(/^新建/, "")}</Badge><p>{option.detail}</p></div>
+            <ArrowRight size={18} />
+          </button>
+        ))}
+      </div>
     </Modal>
   );
 }
