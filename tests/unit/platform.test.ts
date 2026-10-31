@@ -9,10 +9,11 @@ describe("桌面系统命令", () => {
     });
   });
 
-  it("在 Windows 使用 explorer.exe 并保留带空格路径", () => {
+  it("在 Windows 经 cmd start 打开，并保留带空格路径", () => {
     expect(openPathCommand("C:\\Users\\Muzi User\\AppData\\Local\\MuziWorkspace", "win32")).toEqual({
-      command: "explorer.exe",
-      args: ["C:\\Users\\Muzi User\\AppData\\Local\\MuziWorkspace"],
+      command: "cmd.exe",
+      args: ["/c", "start", "", "C:\\Users\\Muzi User\\AppData\\Local\\MuziWorkspace"],
+      shell: false,
     });
   });
 });

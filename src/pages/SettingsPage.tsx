@@ -15,7 +15,7 @@ const collectionLabels: Record<string, string> = { planItems: "今日计划", qu
 const dashboardOptions = [{ value: "media", label: "自媒体" }, { value: "development", label: "开发工作" }, { value: "consulting", label: "咨询工作" }, { value: "fitness", label: "健身计划" }, { value: "diet", label: "饮食计划" }, { value: "entertainment", label: "游戏娱乐" }];
 
 export function SettingsPage() {
-  const { data, run, saveNow, refresh } = useWorkspace();
+  const { data, run, saveNow, refresh, notifySuccess } = useWorkspace();
   const queryClient = useQueryClient();
   const system = useQuery({ queryKey: ["system"], queryFn: api.systemStatus });
   const backups = useQuery({ queryKey: ["backups"], queryFn: api.backups });
@@ -106,7 +106,10 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <PageHeader icon={<ModuleArtwork module="settings" />} eyebrow="本机数据控制" title="数据与设置" description="查看数据文件、创建备份、恢复历史版本并调整使用偏好。" />
-      <Section title="数据文件" description="业务数据保存在浏览器之外的独立 SQLite 文件中" action={<Button variant="secondary" onClick={() => void api.openDataDirectory()}><FolderOpen size={16} />打开数据目录</Button>}>
+      <Section title="数据文件" description="业务数据保存在浏览器之外的独立 SQLite 文件中" action={<Button variant="secondary" onClick={() => void run(async () => {
+        const result = await api.openDataDirectory();
+        notifySuccess("已请求打开数据目录", String(result.path || ""));
+      })}><FolderOpen size={16} />打开数据目录</Button>}>
         <div className="data-file-panel"><div className="file-icon"><Database size={27} /></div><div className="file-copy"><strong>app.sqlite</strong><code>{status.dataFile.path}</code><div><span>{formatBytes(status.dataFile.size)}</span><span>修改于 {formatDateTime(status.dataFile.modifiedAt)}</span><Badge tone={status.dataFile.writable ? "success" : "warning"}><Check size={12} />{status.dataFile.writable ? "可读写" : "只读"}</Badge></div></div></div>
         <div className="shutdown-panel">
           <div>

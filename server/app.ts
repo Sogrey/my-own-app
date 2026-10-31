@@ -329,8 +329,17 @@ function systemStatus(paths: AppPaths, backups: BackupManager): Record<string, a
 }
 
 function openPath(target: string): void {
-  const { command, args } = openPathCommand(target);
-  const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
+  const { command, args, shell = false } = openPathCommand(target);
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: "ignore",
+    // 隐藏 cmd 黑框；不要对 explorer GUI 本身 windowsHide
+    windowsHide: process.platform === "win32",
+    shell,
+  });
+  child.on("error", (error) => {
+    console.warn("[open-path]", target, error);
+  });
   child.unref();
 }
 
