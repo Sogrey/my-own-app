@@ -13,7 +13,7 @@
     "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
     "start": "node scripts/start-server.mjs",
     "app:start": "node scripts/start-app.mjs",
-    "lint": "eslint src server tests --max-warnings=0",
+    "lint": "eslint src server shared tests --max-warnings=0",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",

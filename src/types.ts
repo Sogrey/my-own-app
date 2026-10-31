@@ -1,36 +1,14 @@
+import type { CollectionName } from "../shared/schema";
+
+export type { CollectionName };
 export type Entity = Record<string, any> & { id: string };
 
 export type WorkspaceState = {
-  planItems: Entity[];
-  quickMemos: Entity[];
-  mediaContents: Entity[];
-  devProjects: Entity[];
-  devMilestones: Entity[];
-  devWorkItems: Entity[];
-  devLogs: Entity[];
-  clients: Entity[];
-  consultingProjects: Entity[];
-  consultingInteractions: Entity[];
-  consultingDeliverables: Entity[];
-  consultingFollowups: Entity[];
-  consultingTimeEntries: Entity[];
-  workoutTemplates: Entity[];
-  workoutTemplateExercises: Entity[];
-  workouts: Entity[];
-  workoutExercises: Entity[];
-  workoutSets: Entity[];
-  bodyMetrics: Entity[];
-  nutritionTargets: Entity[];
-  foods: Entity[];
-  meals: Entity[];
-  mealItems: Entity[];
-  entertainmentItems: Entity[];
-  playSessions: Entity[];
+  [K in CollectionName]: Entity[];
+} & {
   settings: Record<string, any>;
   trash: Entity[];
 };
-
-export type CollectionName = Exclude<keyof WorkspaceState, "settings" | "trash">;
 
 export type DashboardData = {
   date: string;

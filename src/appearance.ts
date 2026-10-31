@@ -1,5 +1,7 @@
-export type Appearance = "liquid" | "notebook" | "neo";
+import { isAppearance, type Appearance } from "../shared/schema";
+
+export type { Appearance };
 
 export function normalizeAppearance(value: unknown): Appearance {
-  return value === "notebook" || value === "neo" ? value : "liquid";
+  return isAppearance(value) ? value : "liquid";
 }

@@ -17,5 +17,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "tests/unit", "tests/components", "tests/e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "shared", "tests/unit", "tests/components", "tests/e2e", "vite.config.ts", "playwright.config.ts"]
 }
