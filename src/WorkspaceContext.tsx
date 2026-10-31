@@ -1,10 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "./api";
-import type { WorkspaceState } from "./types";
+import { ArrowCounterClockwise } from "@phosphor-icons/react";
+import { api, setWorkspaceMutationListener } from "./api";
+import type { CollectionName, WorkspaceState } from "./types";
+import { applyWorkspaceMutation, type WorkspaceMutation } from "./workspaceState";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 type SaveHandler = () => Promise<void> | void;
+
+type UndoToast = {
+  collection: CollectionName;
+  entityId: string;
+  label: string;
+};
 
 type WorkspaceContextValue = {
   data: WorkspaceState;
@@ -26,10 +34,19 @@ const emptyState: WorkspaceState = {
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
+function entityLabel(entity: Record<string, any>): string {
+  const raw = entity.title ?? entity.name ?? entity.content ?? entity.display_title;
+  const text = typeof raw === "string" ? raw.trim() : "";
+  return text || "这条记录";
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
   const saveHandlers = useRef(new Set<SaveHandler>());
+  const undoTimer = useRef(0);
   const query = useQuery({ queryKey: ["workspace"], queryFn: api.state, staleTime: 15_000 });
 
   useEffect(() => {
@@ -38,12 +55,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [saveStatus]);
 
-  const refreshSavedData = useCallback(async () => {
+  const offerUndo = useCallback((collection: CollectionName, entity: Record<string, any>) => {
+    window.clearTimeout(undoTimer.current);
+    setUndoToast({ collection, entityId: String(entity.id), label: entityLabel(entity) });
+    undoTimer.current = window.setTimeout(() => setUndoToast(null), 7000);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(undoTimer.current), []);
+
+  useEffect(() => {
+    const onMutation = (mutation: WorkspaceMutation) => {
+      queryClient.setQueryData<WorkspaceState>(["workspace"], (current) => {
+        if (!current) return current;
+        return applyWorkspaceMutation(current, mutation);
+      });
+      if (mutation.type === "soft-delete") offerUndo(mutation.collection, mutation.entity);
+    };
+    setWorkspaceMutationListener(onMutation);
+    return () => setWorkspaceMutationListener(null);
+  }, [offerUndo, queryClient]);
+
+  const refreshDerived = useCallback(async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["workspace"] }),
       queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
       queryClient.invalidateQueries({ queryKey: ["system"] }),
       queryClient.invalidateQueries({ queryKey: ["backups"] }),
+      queryClient.invalidateQueries({ queryKey: ["search"] }),
     ]);
   }, [queryClient]);
 
@@ -51,14 +88,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSaveStatus("saving");
     try {
       const result = await operation();
-      await refreshSavedData();
+      // 业务写操作已通过 api 监听器增量 patch workspace，这里只刷新派生查询。
+      await refreshDerived();
       setSaveStatus("saved");
       return result;
     } catch (error) {
       setSaveStatus("error");
       throw error;
     }
-  }, [refreshSavedData]);
+  }, [refreshDerived]);
+
+  const undoSoftDelete = useCallback(async () => {
+    if (!undoToast || undoBusy) return;
+    const target = undoToast;
+    setUndoBusy(true);
+    try {
+      window.clearTimeout(undoTimer.current);
+      setUndoToast(null);
+      await run(() => api.restore(target.collection, target.entityId));
+    } finally {
+      setUndoBusy(false);
+    }
+  }, [run, undoBusy, undoToast]);
 
   const registerSaveHandler = useCallback((handler: SaveHandler) => {
     saveHandlers.current.add(handler);
@@ -70,13 +121,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       for (const handler of [...saveHandlers.current]) await handler();
       await api.saveNow();
-      await refreshSavedData();
+      await queryClient.invalidateQueries({ queryKey: ["system"] });
       setSaveStatus("saved");
     } catch (error) {
       setSaveStatus("error");
       throw error;
     }
-  }, [refreshSavedData]);
+  }, [queryClient]);
 
   const value = useMemo<WorkspaceContextValue>(() => ({
     data: query.data ?? emptyState,
@@ -91,7 +142,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
   }), [query.data, query.isLoading, query.error, queryClient, registerSaveHandler, run, saveNow, saveStatus]);
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return (
+    <WorkspaceContext.Provider value={value}>
+      {children}
+      {undoToast ? (
+        <div className="undo-toast glass-regular" role="status" aria-live="polite" data-testid="undo-toast">
+          <div className="undo-toast-copy">
+            <strong>已移到回收站</strong>
+            <span>{undoToast.label}</span>
+          </div>
+          <button type="button" className="undo-toast-action" disabled={undoBusy} onClick={() => void undoSoftDelete().catch(() => undefined)}>
+            <ArrowCounterClockwise size={16} />
+            撤销
+          </button>
+        </div>
+      ) : null}
+    </WorkspaceContext.Provider>
+  );
 }
 
 export function useWorkspace(): WorkspaceContextValue {

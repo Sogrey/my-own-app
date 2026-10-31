@@ -700,6 +700,46 @@ kbd {
 .save-saved { color: var(--success); background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 22%, transparent); }
 .save-error { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 30%, transparent); font-weight: 600; }
 
+/* 软删后短暂可撤销：贴底居中，不挡主操作 */
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-float, 0 18px 40px rgba(12, 24, 36, .16));
+  transform: translateX(-50%);
+  animation: undo-in 220ms var(--spring, cubic-bezier(.2, .8, .2, 1)) both;
+}
+.undo-toast-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.undo-toast-copy strong { font-size: 13px; font-weight: 650; color: var(--text); }
+.undo-toast-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); font-size: 12px; }
+.undo-toast-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-control);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 620;
+  white-space: nowrap;
+}
+.undo-toast-action:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+.undo-toast-action:disabled { opacity: .55; }
+@keyframes undo-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
 /* 主内容区 */
 .page-container {
   max-width: 1560px;
@@ -1045,12 +1085,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .dashboard-command-strip button:hover svg { color: var(--accent); }
 .dashboard-command-strip button:active { transform: scale(.98); }
 
-.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(288px, .68fr); gap: 16px; align-items: start; }
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(288px, .68fr); gap: 16px; align-items: stretch; }
+.dashboard-primary { display: flex; flex-direction: column; min-height: 100%; }
 .dashboard-primary > .section { margin: 0 0 14px; }
-.dashboard-primary > .section:last-child { margin-bottom: 0; }
+.dashboard-primary > .section:last-child { margin-bottom: 0; flex: 1; }
 .dashboard-aside {
   position: sticky;
   top: 80px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
   padding: 0 18px;
   border: 1px solid var(--glass-rim);
   border-radius: var(--radius-glass);
@@ -1061,6 +1106,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 }
 .dashboard-aside .section { padding: 18px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .dashboard-aside .section + .section { margin-top: 0; border-top: 1px solid var(--border); }
+.dashboard-aside .memo-section { flex: 1; display: flex; flex-direction: column; }
+.dashboard-aside .memo-section .memo-pad { flex: 1; }
+.dashboard-aside .memo-pad textarea { min-height: 160px; height: 100%; }
 .dashboard-page > .section { margin-top: 18px; padding: 0; border: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 
 .memo-pad { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; color: var(--accent); }
@@ -1078,7 +1126,32 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .memo-pad textarea { min-height: 120px; padding: 4px 2px; }
 .memo-pad textarea:focus { border-color: var(--accent); background: var(--surface-raised); padding: 8px 10px; box-shadow: 0 0 0 3px var(--accent-soft); }
 .memo-pad textarea::placeholder, .review-input::placeholder { color: var(--text-faint); }
-.memo-actions { display: flex; gap: 4px; justify-content: flex-end; margin-top: 8px; }
+.memo-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; align-items: center; margin-top: 8px; }
+.memo-convert-more select {
+  height: 30px;
+  max-width: 128px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 560;
+}
+.memo-convert-more select:hover,
+.memo-convert-more select:focus { border-color: var(--border); background: var(--surface-inset); color: var(--text); outline: none; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .timeline-list, .plain-list, .attention-list, .plan-table, .work-list, .log-list,
 .check-list, .interaction-timeline, .session-list, .backup-list, .preferences, .trash-list { display: grid; }
@@ -1476,7 +1549,20 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 /* 网格里的 Section 不是纵向相邻面板，不能继承 .section + .section 的上边距。
    否则第二列会被向下推，产生模块错位；网格本身与上下内容则保留完整间隔。 */
 .app-shell .page-container :is(.consult-grid, .fitness-grid, .settings-grid, .meal-columns) > .section + .section { margin-top: 0; }
+/* 设置页备份/导出内容很少：按内容收紧，不强行等高撑空白 */
+.settings-grid > .section { padding: 14px 16px; }
 .fitness-grid, .settings-grid { margin-block: var(--space-4); }
+.shutdown-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.shutdown-panel strong { display: block; font-size: 12.5px; font-weight: 620; }
+.shutdown-panel p { margin: 4px 0 0; color: var(--text-soft); font-size: 11px; line-height: 1.55; max-width: 42rem; }
 .check-list article { min-height: 52px; display: grid; grid-template-columns: 22px minmax(0, 1fr) 32px; gap: 10px; align-items: center; border-bottom: 1px solid var(--border); }
 .check-list article:last-child { border-bottom: 0; }
 .check-list article > div { display: grid; gap: 3px; min-width: 0; }
@@ -1707,7 +1793,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .file-copy code { color: var(--text-soft); font: 10.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-copy > div { display: flex; flex-wrap: wrap; gap: 6px 13px; align-items: center; }
 .file-copy span { color: var(--text-faint); font-size: 10.5px; }
-.backup-list article { min-height: 60px; display: grid; grid-template-columns: 78px minmax(0, 1fr) 84px auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--border); }
+.backup-list article { min-height: 48px; display: grid; grid-template-columns: 78px minmax(0, 1fr) 84px auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--border); }
 .backup-list article:last-child { border-bottom: 0; }
 .backup-type { display: flex; align-items: center; gap: 6px; color: var(--text-faint); }
 .backup-list article > div:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
@@ -1717,7 +1803,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .backup-list strong { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .backup-list small { color: var(--text-soft); font-size: 10.5px; }
 .keep-check { display: flex; align-items: center; gap: 5px; color: var(--text-soft); font-size: 10.5px; cursor: pointer; }
-.export-panel { min-height: 140px; display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; }
+.export-panel { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 4px 0; }
 .export-panel > svg { color: var(--accent); }
 .export-panel strong { font-size: 12.5px; font-weight: 620; }
 .export-panel p { margin: 5px 0 0; color: var(--text-soft); font-size: 10.5px; line-height: 1.55; }
